@@ -1,0 +1,164 @@
+const xpPerLevel = [
+    400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600,
+    8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200,
+    25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400,
+    50800, 54500, 58600, 62800, 67100, 71600, 76100, 80800, 85700, 90700,
+    95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100, 141200, 147500,
+    153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800
+  ];
+  
+  
+  let chart = null;
+  
+  function calculate() {
+    const level = parseInt(document.getElementById("level").value);
+    const played = parseFloat(document.getElementById("played").value);
+    const dailyHours = parseFloat(document.getElementById("dailyHours").value);
+  
+    const defaultXpPerHour = 26024;
+  
+    if (level < 1 || level >= 60) {
+      document.getElementById("result").innerText = "Enter a level between 1 and 59.";
+      return;
+    }
+  
+    const xpSoFar = xpPerLevel.slice(0, level - 1).reduce((a, b) => a + b, 0);
+    const remainingXP = xpPerLevel.slice(level - 1).reduce((a, b) => a + b, 0);
+    const xpPerHour = !isNaN(played) && played > 0 ? xpSoFar / played : defaultXpPerHour;
+  
+    const hoursLeft = remainingXP / xpPerHour;
+    const daysLeft = hoursLeft / dailyHours;
+
+    const fullDays    = Math.floor(hoursLeft / 24);
+    const remHours    = Math.round(hoursLeft % 24);
+  
+    document.getElementById("result").innerText = `
+      Based on your speed:
+      Remaining XP: ${remainingXP.toLocaleString()}
+      Estimated time to 60: ${Math.ceil(hoursLeft)}h (total /played: ${Math.floor((hoursLeft + (played||0))/24)}d ${Math.round((hoursLeft + (played||0))%24)}h)
+      Days left (at ${dailyHours}h/day): ${Math.ceil(daysLeft)} days (at ${dailyHours}h/day)
+    `;
+  
+    drawChart(xpPerHour, dailyHours);
+  }
+  
+  function drawChart(xpPerHour, dailyHours) {
+    const data = [];
+    const startLevel = parseInt(document.getElementById("level").value, 10);
+    let currentDay = 0;
+  
+    for (let i = startLevel - 1; i < xpPerLevel.length; i++) {
+      const daysNeeded = (xpPerLevel[i] / xpPerHour) / dailyHours;
+      currentDay += daysNeeded;
+      if (currentDay > 365) {
+        data.push({ x: 365, y: 60 });
+        break;
+      }
+      data.push({ x: Math.round(currentDay), y: i + 1 });
+    }
+  
+    const ctx = document.getElementById('progressChart').getContext('2d');
+    if (chart) chart.destroy();
+  
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: 'Level Progression by Day',
+          data: data,
+          parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+          borderColor: '#ffcc00',
+          borderWidth: 4,
+          pointRadius: 3,
+          fill: false,
+          tension: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+      
+        layout: {
+          padding: { top: 40, right: 30, bottom: 40, left: 30 }
+        },
+      
+        plugins: {
+          title: {
+            display: true,
+            text: 'Level Progression by Day',
+            color: '#ffcc00',
+            font: {
+              size: 24,
+              family: 'Arial, sans-serif',
+              weight: 'bold'
+            },
+            padding: { top: 20, bottom: 20 }
+          },
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => `Day ${ctx.parsed.x} → Level ${ctx.parsed.y}`
+            }
+          }
+        },
+      
+        scales: {
+          x: {
+            type: 'linear',
+            position: 'bottom',
+            offset: true,
+            title: {
+              display: true,
+              text: 'Days',
+              color: '#fff',
+              font: {
+                size: 18,
+                family: 'Arial, sans-serif',
+                weight: 'bold'
+              },
+              padding: { top: 20, bottom: 10 }
+            },
+            ticks: {
+              color: '#fff',
+              stepSize: 1,
+              font: {
+                size: 14,
+                family: 'Arial, sans-serif'
+              },
+              maxRotation: 0,
+              autoSkip: true,
+              autoSkipPadding: 15
+            },
+            grid: { color: '#333' }
+          },
+          y: {
+            offset: true,
+            title: {
+              display: true,
+              text: 'Level',
+              color: '#fff',
+              font: {
+                size: 18,
+                family: 'Arial, sans-serif',
+                weight: 'bold'
+              },
+              padding: { top: 10, bottom: 10 }
+            },
+            min: startLevel,
+            max: 60,
+            ticks: {
+              color: '#fff',
+              stepSize: 5,
+              font: {
+                size: 14,
+                family: 'Arial, sans-serif'
+              }
+            },
+            grid: { color: '#333' }
+          }
+        }
+      }
+      
+    });
+  }
+  

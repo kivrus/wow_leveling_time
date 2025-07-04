@@ -1,0 +1,124 @@
+body {
+    background-color: #111;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    #max-width: 600px;
+    margin: auto;
+  }
+  
+  input, button {
+    background-color: #222;
+    color: #fff;
+    border: 1px solid #444;
+    padding: 5px 10px;
+    margin-top: 5px;
+  }
+  
+  button:hover {
+    background-color: #333;
+    cursor: pointer;
+  }
+  
+  h1 {
+    color: #ffcc00;
+  }
+
+#progressChart {
+  display: block;
+  width: 100%;
+  min-width: 400px;
+  max-width: 100%;
+  height: 700px !important;
+
+  margin: 20px auto;
+  padding: 1px;
+  box-sizing: border-box;
+}
+
+.header-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  
+  .youtube-link {
+    color: #32CD32;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1rem;
+  }
+  
+  .youtube-link:hover {
+    text-decoration: underline;
+  }
+  
+
+  /* ==== КОЛОНКИ ==== */
+.calc-left {
+  float: left;
+  width: 260px;        /* подберите ширину по содержимому */
+  margin-right: 20px;  /* отступ до правой колонки */
+}
+
+.calc-right {
+  overflow: hidden;    /* завершает обтекание float’ом */
+}
+
+/* Подстройка размера графика */
+#chartWrapper {
+  width: calc(100% - 280px); /* 100% минус (ширина левой колонки + margin) */
+  height: 700px;             /* можно менять на нужную */
+}
+
+/* ==== СТОЯВШИЕ СТИЛИ ==== */
+body {
+  background-color: #111;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  padding: 20px;
+  margin: auto;
+}
+input, button {
+  background-color: #222;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 5px 10px;
+  margin-top: 5px;
+}
+button:hover {
+  background-color: #333;
+  cursor: pointer;
+}
+h1 {
+  color: #ffcc00;
+}
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.youtube-link {
+  color: #32CD32;
+  text-decoration: none;
+  font-weight: bold;
+  font-size: 1rem;
+}
+.youtube-link:hover {
+  text-decoration: underline;
+}
