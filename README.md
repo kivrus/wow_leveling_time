@@ -1,7 +1,5 @@
 # WoW Classic Leveling Time Calculator (Vanilla 1–60)
 
-![WoW Classic Icon](https://raw.githubusercontent.com/YourRepo/assets/main/wow-icon.png)
-
 **Author:** [Kivrus](https://www.youtube.com/yourchannel) ✨
 
 A lightweight web tool to estimate how long it will take your character to level from your current level to 60 in World of Warcraft Classic (Vanilla), factoring in your play speed and rested XP bonus.
