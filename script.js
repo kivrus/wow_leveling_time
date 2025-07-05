@@ -33,7 +33,11 @@ function calculate() {
   const xpBoost      = 1 + restedBonus;
 
   if (level < 1 || level >= 60) {
-    document.getElementById('result').innerText = 'Enter a level between 1 and 59.';
+    document.getElementById('res-speed').innerText = `+${Math.round(restedBonus*100)}% rested`;
+    document.getElementById('res-xp').innerText    = remainingXP.toLocaleString();
+    document.getElementById('res-time').innerText  = `${Math.ceil(hoursLeft)}h (total /played: ${totalDays}d ${totalHoursRem}h)`;
+    document.getElementById('res-daily').innerText = dailyHours;
+    document.getElementById('res-days').innerText  = `${d}d ${h}h`;
     return;
   }
 
@@ -59,12 +63,11 @@ function calculate() {
   const d = Math.floor(daysLeft);
   const h = Math.round((daysLeft - d) * dailyHours);
 
-  document.getElementById('result').innerText = `
-Based on your speed (+${Math.round(restedBonus * 100)}% rested on kills):
-Remaining XP: ${remainingXP.toLocaleString()}
-Estimated time to 60: ${Math.ceil(hoursLeft)}h (total /played: ${totalDays}d ${totalHoursRem}h)
-Days left (at ${dailyHours}h/day): ${d}d ${h}h
-`;
+  document.getElementById('res-speed').innerText = `+${Math.round(restedBonus * 100)}% rested`;
+  document.getElementById('res-xp')   .innerText = remainingXP.toLocaleString();
+  document.getElementById('res-time') .innerText = `${Math.ceil(hoursLeft)}h (total /played: ${totalDays}d ${totalHoursRem}h)`;
+  document.getElementById('res-daily').innerText = dailyHours;
+  document.getElementById('res-days') .innerText = `${d}d ${h}h`;
 
   drawChart(xpPerHour, dailyHours, baseXpPerHour, level);
 }

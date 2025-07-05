@@ -9,7 +9,7 @@
 <body>
   <h1>WoW Classic Leveling Time Calculator (Vanilla 1-60)</h1>
 
-  <!-- ваша шапка с аватаром и ссылкой -->
+  <!-- avatar + link -->
   <div class="header-info">
     <img src="avatar.png" alt="My Avatar" class="avatar">
     <a href="https://www.youtube.com/@Kivrus" target="_blank" class="youtube-link">
@@ -17,7 +17,7 @@
     </a>
   </div>
 
-  <!-- левая колонка: ввод -->
+  <!-- left columnt: input -->
   <div class="calc-left">
     <label for="level">Current level:</label><br>
     <input type="number" id="level" min="1" max="59" value="1"><br><br>
@@ -31,9 +31,28 @@
     <button onclick="calculate()">Calculate</button>
   </div>
 
-  <!-- правая колонка: результат + график -->
+  <!-- right column: result + chart -->
   <div class="calc-right">
-    <p id="result"></p>
+    <div id="result">
+      <table class="result-table">
+        <tr>
+          <td class="label">Based on your speed</td>
+          <td class="value"><span id="res-speed"></span></td>
+        </tr>
+        <tr>
+          <td class="label">Remaining XP</td>
+          <td class="value"><span id="res-xp"></span></td>
+        </tr>
+        <tr>
+          <td class="label">Estimated time to 60</td>
+          <td class="value"><span id="res-time"></span></td>
+        </tr>
+        <tr>
+          <td class="label">Days left (at <span id="res-daily"></span>h/day)</td>
+          <td class="value"><span id="res-days"></span></td>
+        </tr>
+      </table>
+    </div>
     <div id="chartWrapper">
       <canvas id="progressChart"></canvas>
     </div>
