@@ -67,8 +67,8 @@ function calculate() {
   const hoursLeftDisplay = Math.ceil(hoursLeftPrecise);
 
   // total hours played including projected
-  const totalPlayedHours = played + hoursLeftDisplay;
-  const totalDays = Math.floor(totalPlayedHours / 24); // full days
+  const totalPlayedHours = played > 0 ? played + hoursLeftDisplay : hoursLeftDisplay;
+  const totalDays = Math.floor( (played + totalPlayedHours) / 24); // full days
   const totalHoursRem = totalPlayedHours % 24; // leftover hours
 
   // calculate days left based on dailyHours using displayed hours
