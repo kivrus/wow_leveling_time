@@ -27,8 +27,4 @@ Finally, it adds up the time needed for all remaining levels and converts the to
 **Kivrus** is a youtube content creator and a small streamer and data analyst who loves World of Warcraft Classic. This tool was created to help the community plan their leveling journey and make the best use of rested XP.
 Code was written with AI support.
 
----
 
-## 📄 License
-
-This project is released under the MIT License. See [LICENSE](LICENSE) for details.
