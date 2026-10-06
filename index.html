@@ -1,63 +1,57 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>WoW Classic Leveling Time Calculator</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WoW Leveling Calculator</title>
+  <link rel="stylesheet" href="style.css?v=6">
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script defer src="dungeons.js?v=5"></script>
+  <script defer src="script.js?v=5"></script>
+  <script defer src="ui.js?v=5"></script>
 </head>
 <body>
-  <h1>WoW Classic Leveling Time Calculator (Vanilla 1-60)</h1>
-
-  <!-- avatar + link -->
-  <div class="header-info">
-    <img src="avatar.png" alt="My Avatar" class="avatar">
-    <a href="https://www.youtube.com/@Kivrus" target="_blank" class="youtube-link">
-      Made by Kivrus
-    </a>
-  </div>
-
-  <!-- left columnt: input -->
-  <div class="calc-left">
-    <label for="level">Current level:</label><br>
-    <input type="number" id="level" min="1" max="59" value="1"><br><br>
-
-    <label for="played">Time already played (hours):</label><br>
-    <input type="number" id="played" min="0" step="0.1"><br><br>
-
-    <label for="dailyHours">Hours played per day:</label><br>
-    <input type="number" id="dailyHours" min="1" max="24" value="1"><br><br>
-
-    <button onclick="calculate()">Calculate</button>
-  </div>
-
-  <!-- right column: result + chart -->
-  <div class="calc-right">
-    <div id="result">
-      <table class="result-table">
-        <tr>
-          <td class="label">Based on your speed</td>
-          <td class="value"><span id="res-speed"></span></td>
-        </tr>
-        <tr>
-          <td class="label">Remaining XP</td>
-          <td class="value"><span id="res-xp"></span></td>
-        </tr>
-        <tr>
-          <td class="label">Estimated time to 60</td>
-          <td class="value"><span id="res-time"></span></td>
-        </tr>
-        <tr>
-          <td class="label">Days left (at <span id="res-daily"></span>h/day)</td>
-          <td class="value"><span id="res-days"></span></td>
-        </tr>
-      </table>
+  <main>
+    <header>
+      <div class="brand vanilla" id="brand"><img id="gameLogo" src="assets/vanilla-logo.png" alt="World of Warcraft"></div>
+      <div class="heading"><h1 data-i18n="title">Калькулятор прокачки 1–60</h1><a href="https://www.youtube.com/@Kivrus" target="_blank" rel="noopener noreferrer"><img src="avatar.png" alt="" width="22" height="22"> Kivrus</a></div>
+      <div class="switches">
+        <div class="segmented" id="languages" aria-label="Language">
+          <button type="button" data-lang="ru" aria-label="🇷🇺 RU" aria-pressed="true"><svg class="flag" viewBox="0 0 24 16" aria-hidden="true"><path fill="#fff" d="M0 0h24v16H0z"/><path fill="#2455a4" d="M0 5.33h24v5.34H0z"/><path fill="#d43c46" d="M0 10.67h24V16H0z"/></svg> RU</button>
+          <button type="button" data-lang="en" aria-label="🇬🇧 EN" aria-pressed="false"><svg class="flag" viewBox="0 0 24 16" aria-hidden="true"><path fill="#254780" d="M0 0h24v16H0z"/><path stroke="#fff" stroke-width="4" d="m0 0 24 16m0-16L0 16"/><path stroke="#cf394b" stroke-width="1.5" d="m0 0 24 16m0-16L0 16"/><path stroke="#fff" stroke-width="6" d="M12 0v16M0 8h24"/><path stroke="#cf394b" stroke-width="3" d="M12 0v16M0 8h24"/></svg> EN</button>
+        </div>
+      </div>
+    </header>
+    <div class="calculator">
+      <form id="calculatorForm" novalidate>
+        <div class="segmented" id="versions" aria-label="Game version"><button type="button" data-version="vanilla" aria-pressed="true">Vanilla</button><button type="button" data-version="forever" aria-pressed="false">Forever</button></div>
+        <div class="inputs">
+          <label><span data-i18n="level">Уровень</span><input type="number" id="level" min="1" max="59" step="1" value="1" required></label>
+          <label><span data-i18n="played">/played, часов</span><input type="number" id="played" min="0" max="1000000" step="any" placeholder="0"></label>
+          <label><span data-i18n="dailyHours">Часов в день</span><input type="number" id="dailyHours" min="0.1" max="24" step="any" value="2" required></label>
+        </div>
+        <fieldset id="foreverOptions" hidden disabled>
+          <label class="check"><input type="checkbox" id="sleepingBag" checked><span>Sleeping Bag <small data-i18n="bag">+3% XP, с 14 ур.</small></span></label>
+          <label class="check"><input type="checkbox" id="foodBuff" checked><span>Food EXP Buff <small data-i18n="food">+5% XP за убийства</small></span></label>
+          <label><span data-i18n="faction">Фракция</span><select id="faction"><option value="alliance" data-i18n="alliance">Альянс</option><option value="horde" data-i18n="horde">Орда</option></select></label>
+          <label><span data-i18n="dungeons">Данжи</span><select id="dungeonMode"><option value="off" data-i18n="off">Выключены</option><option value="typical" data-i18n="typical">Обычный маршрут</option><option value="all" data-i18n="all">Все первые заходы</option></select></label>
+        </fieldset>
+        <p id="formError" role="alert" hidden></p>
+        <button class="calculate" type="submit" data-i18n="calculate">Рассчитать</button>
+      </form>
+      <section class="results" aria-label="Results">
+        <div class="summary" aria-live="polite">
+          <div><span data-i18n="remaining">До 60 уровня</span><strong id="res-time">—</strong></div>
+          <div><span data-i18n="days">Дней игры</span><strong id="res-days">—</strong></div>
+          <div><span data-i18n="xp">Осталось XP</span><strong id="res-xp">—</strong></div>
+          <div id="dungeonSaving" hidden><span data-i18n="saved">Экономия с данжами ≈</span><strong id="res-dungeon">—</strong></div>
+        </div>
+        <p id="res-total"></p><p id="resultStatus" role="status" hidden></p>
+        <div id="chartWrapper"><canvas id="progressChart" role="img" aria-label="Level progression"></canvas></div>
+        <p id="chartFallback" hidden data-i18n="chartFallback">График не загрузился. Расчёт работает.</p>
+      </section>
     </div>
-    <div id="chartWrapper">
-      <canvas id="progressChart"></canvas>
-    </div>
-  </div>
-
-  <script src="script.js?v=2"></script>
+    <p class="model-note" data-i18n="note">База: ~150 ч. Rested учтён. /played уточняет темп. Данжи — оценка, особенно после 30 уровня.</p>
+  </main>
 </body>
 </html>

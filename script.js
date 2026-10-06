@@ -1,4 +1,4 @@
-// XP required for each level from 1→60
+// XP required for each level from 1 to 60; index 0 is 1 → 2.
 const xpPerLevel = [
   400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600,
   8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200,
@@ -8,164 +8,115 @@ const xpPerLevel = [
   153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800
 ];
 
-// XP rate formula based on community data: XP/h ≈ 1500 + 630 × level
-function getLevelRate(lvl) {
-  return 1500 + 630 * lvl; // return baseline XP/hour for given level
+// Chosen reference pace, not a measured population average. No rested included.
+const referenceMinutesPerLevel = [
+  // 1–10
+  10, 15, 20, 25, 30, 30, 35, 40, 40,
+  // 10–20
+  60, 60, 65, 70, 75, 80, 85, 85, 90, 95,
+  // 20–30
+  110, 115, 120, 125, 130, 135, 140, 145, 145, 155,
+  // 30–40
+  150, 155, 165, 170, 175, 185, 190, 200, 205, 210,
+  // 40–50
+  190, 195, 200, 205, 210, 220, 225, 230, 235, 240,
+  // 50–60
+  245, 250, 255, 260, 270, 275, 280, 285, 290, 295
+];
+
+const dungeonModel = typeof module !== 'undefined' && module.exports
+  ? require('./dungeons.js') : { dungeonData, dungeonBlocks, DUNGEON_EFFECTIVE_FACTOR, DUNGEON_TYPICAL_FACTOR };
+const KILL_XP_FRACTION = 0.4; // Planning assumption; the rest is quests/exploration.
+
+// Existing approximation retained. Assume logout in a rested area between sessions.
+function getRestedBonus(dailyHours) {
+  return KILL_XP_FRACTION * Math.max(0, 24 - dailyHours) / 8 * 0.05;
 }
 
-let chart = null; // global Chart.js instance
-
-function calculate() {
-  // read and parse user inputs
-  const level = parseInt(document.getElementById('level').value, 10);
-  const played = parseFloat(document.getElementById('played').value) || 0;
-  const dailyHours = parseFloat(document.getElementById('dailyHours').value) || 0;
-
-  // validate level input
-  if (isNaN(level) || level < 1 || level >= 60) {
-    alert('Please enter a valid level between 1 and 59');
-    return;
-  }
-
-  // calculate XP so far and remaining XP to level 60
-  //const xpSoFar = xpPerLevel.slice(0, level - 1).reduce((sum, xp) => sum + xp, 0);
-  const remainingXP = xpPerLevel.slice(level - 1).reduce((sum, xp) => sum + xp, 0);
-
-  // calculate rested bonus multiplier
-  const killFraction = 0.4; // fraction of XP from kills
-  const offlineHours = Math.max(0, 24 - dailyHours); // hours offline per day
-  const bubbles = Math.min(offlineHours / 8, 30); // max 30 bubbles
-  const bonusOnKills = bubbles * 0.05; // 5% per bubble
-  const restedBonus = Math.min(killFraction * bonusOnKills, killFraction * 1.5); // cap at 1.5 bubbles worth
-  const xpBoost = 1 + restedBonus; // total XP multiplier
-
-  // determine baseline and adjusted XP/hour rates
-  const startingRate = getLevelRate(level); // baseline XP/h at current level
-
-  let expectedHours = 0;
-  for (let i = 0; i < level - 1; i++) {
-    const lvl = i + 1;
-    const rate = getLevelRate(lvl);
-    expectedHours += xpPerLevel[i] / rate;
-  }
-
-  const adjustmentFactor = 0.15
-  const expectedToPlayed = played > 0 ? expectedHours / played : 1;
-  const playerMultiplier = 1 * (1 - adjustmentFactor) + expectedToPlayed * adjustmentFactor;
-  const xpPerHour = startingRate * playerMultiplier * xpBoost;
-
-  // calculate precise hours left to reach level 60
-  let hoursLeftPrecise = 0;
-  for (let i = level - 1; i < xpPerLevel.length; i++) {
-    const lvl = i + 1;
-    const levelRate = getLevelRate(lvl);
-    const effRate = xpPerHour * (levelRate / startingRate); // adjust per level difficulty
-    hoursLeftPrecise += xpPerLevel[i] / effRate;
-  }
-
-  // derive displayed hours left (rounded up)
-  const hoursLeftDisplay = Math.ceil(hoursLeftPrecise);
-
-  // total hours played including projected
-  const totalPlayedHours = played > 0 ? played + hoursLeftDisplay : hoursLeftDisplay;
-  const totalDays = Math.floor(totalPlayedHours / 24);
-  const totalHoursRem = totalPlayedHours % 24;
-
-  // calculate days left based on dailyHours using displayed hours
-  let daysLeftDays = 0;
-  let daysLeftHours = 0;
-  if (dailyHours > 0) {
-    daysLeftDays = Math.floor(hoursLeftDisplay / dailyHours);
-    daysLeftHours = hoursLeftDisplay - daysLeftDays * dailyHours;
-  }
-
-  // update HTML elements with computed values
-  document.getElementById('res-speed').innerText = `+${Math.round(restedBonus * 100)}% rested`;
-  document.getElementById('res-xp').innerText = remainingXP.toLocaleString();
-  document.getElementById('res-time').innerText = `${hoursLeftDisplay}h (total /played: ${totalDays}d ${totalHoursRem}h)`;
-  document.getElementById('res-daily').innerText = dailyHours;
-  document.getElementById('res-days').innerText = `${daysLeftDays}d ${daysLeftHours}h`;
-
-  // redraw chart with new rates
-  drawChart(xpPerHour, dailyHours, startingRate, level);
+function getXpBoost(level, { version = 'vanilla', sleepingBag = false, foodBuff = false, dailyHours, includeRested = true }) {
+  const rested = includeRested ? getRestedBonus(dailyHours) : 0;
+  const bag = version === 'forever' && sleepingBag && level >= 14 ? 0.03 : 0;
+  const food = version === 'forever' && foodBuff ? 0.05 : 0;
+  // Additive bonuses are a modeling assumption, not a verified in-game stacking rule.
+  return { total: 1 + rested + bag + KILL_XP_FRACTION * food,
+    quest: 1 + bag, mob: 1 + rested / KILL_XP_FRACTION + bag + food };
 }
 
-function drawChart(playerRate, dailyHours, baseRate, startLevel) {
-  const data = [];
-  let currentDay = 0;
-  let lastDay = -1;
-
-  data.push({ x: 0, y: startLevel });
-
-  // Loop through levels from startLevel to 60
-  for (let i = startLevel - 1; i < xpPerLevel.length; i++) {
-    const lvl = i + 1;
-    const levelRate = getLevelRate(lvl);
-    const effRate = playerRate * (levelRate / baseRate);
-    const hours = xpPerLevel[i] / effRate;
-    const days = dailyHours > 0 ? hours / dailyHours : 0;
-
-    currentDay += days;
-    const dayInt = Math.floor(currentDay);
-    if (dayInt > lastDay) {
-      data.push({ x: dayInt, y: lvl });
-      lastDay = dayInt;
-    }
+function getDungeonExtraXP(dungeon, faction) {
+  const quest=dungeon.questXp[faction], classic=dungeon.classicQuestXp[faction];
+  if(Number.isFinite(quest) && (dungeon.kind==='new' || Number.isFinite(classic))) {
+    return Math.max(0, dungeon.kind==='new'?quest:quest-classic);
   }
+  const range=dungeon.extraQuestXP[faction];
+  return range ? (range[0]+range[1])/2 : 0;
+}
 
-  const finalPreciseDay = currentDay;
-  const finalRoundedDay = Math.ceil(currentDay);
-  data.push({ x: finalRoundedDay, y: 60 });
-  
-  if (data[data.length - 1].y < 60) {
-    const trueFinalX = currentDay;
-    const displayFinalX = Math.round(trueFinalX);
-    data.push({ x: trueFinalX, y: 60 });
-    data.push({ x: displayFinalX, y: 60 });
-  }
-
-  const ctx = document.getElementById('progressChart').getContext('2d');
-  if (chart) chart.destroy();
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      datasets: [{
-        label: 'Daily Level Progression',
-        data,
-        parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-        borderColor: '#ffcc00', borderWidth: 4, pointRadius: 3, fill: false, tension: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'nearest', intersect: false },
-      layout: { padding: { top: 40, right: 30, bottom: 40, left: 30 } },
-      plugins: {
-        title: { display: true, text: 'Level Progression by Day', color: '#ffcc00', font: { size: 24, weight: 'bold' }, padding: { top: 20, bottom: 20 } },
-        legend: { display: false },
-        tooltip: { enabled: true, callbacks: { label: ctx => `Day ${Math.round(ctx.parsed.x)} → Level ${ctx.parsed.y}` }}
-      },
-      scales: {
-        x: {
-          type: 'linear',
-          position: 'bottom',
-          offset: true,
-          min: 0,
-          max: finalRoundedDay + 1,
-          title: { display: true, text: 'Days', color: '#fff', font: { size: 18, weight: 'bold' }, padding: { top: 20, bottom: 10 } },
-          ticks: { color: '#fff', stepSize: 1, font: { size: 14 }, maxRotation: 0, autoSkip: true, autoSkipPadding: 15 },
-          grid: { color: '#333' }
-        },
-        y: {
-          offset: true,
-          title: { display: true, text: 'Level', color: '#fff', font: { size: 18, weight: 'bold' }, padding: { top: 10, bottom: 10 } },
-          min: startLevel,
-          max: 60,
-          ticks: { color: '#fff', stepSize: 5, font: { size: 14 } },
-          grid: { color: '#333' }
-        }
-      }
+// Block-level planning scenario. No free XP subtraction and no second mob/run penalty.
+function getDungeonAdjustments({ level, faction, dungeonMode, version }, levelMinutes, data = dungeonModel.dungeonData) {
+  const adjustments = Array(59).fill(0);
+  const breakdown = [];
+  if (version !== 'forever' || dungeonMode === 'off') return { adjustments, breakdown };
+  const attendance = dungeonMode === 'typical' ? dungeonModel.DUNGEON_TYPICAL_FACTOR : 1;
+  for (const block of dungeonModel.dungeonBlocks) {
+    const dungeons = data.filter(dungeon => dungeon.typicalLevel >= block.minLevel && dungeon.typicalLevel < block.maxLevel && (dungeon.faction === faction || dungeon.faction === 'both'));
+    const rawQuestXP = dungeons.reduce((sum, dungeon) => {
+      return sum + getDungeonExtraXP(dungeon, faction) * dungeon.packageShare;
+    }, 0);
+    const routeQuestXP = rawQuestXP * block.routeCoverage;
+    const effectiveXP = routeQuestXP * dungeonModel.DUNGEON_EFFECTIVE_FACTOR * attendance;
+    const blockXP = xpPerLevel.slice(block.minLevel - 1, block.maxLevel - 1).reduce((sum, xp) => sum + xp, 0);
+    const reduction = Math.min(0.3, effectiveXP / blockXP); // Forecast guard, not a game rule.
+    let savedMinutes = 0;
+    // Completed parts of a block are never credited again. Smooth the scenario over the block.
+    for (let lvl = Math.max(level, block.minLevel); lvl < block.maxLevel; lvl++) {
+      adjustments[lvl - 1] = levelMinutes[lvl - 1] * reduction;
+      savedMinutes += adjustments[lvl - 1];
     }
-  });
+    if (level < block.maxLevel) breakdown.push({ ...block, rawQuestXP, routeQuestXP, effectiveXP, blockXP, reduction, savedMinutes });
+  }
+  return { adjustments, breakdown };
+}
+
+function calculateProjection({ level, played = 0, dailyHours, includeRested = true,
+  version = 'vanilla', sleepingBag = false, foodBuff = false, faction = 'alliance', dungeonMode = 'off' }) {
+  if (!Number.isInteger(level) || level < 1 || level > 59) throw new RangeError('level');
+  if (!Number.isFinite(played) || played < 0 || played > 1000000) throw new RangeError('played');
+  if (!Number.isFinite(dailyHours) || dailyHours < 0.1 || dailyHours > 24) throw new RangeError('dailyHours');
+  if (!['vanilla', 'forever'].includes(version) || !['alliance', 'horde'].includes(faction)
+      || !['off', 'typical', 'all'].includes(dungeonMode)) throw new RangeError('settings');
+  const sum = values => values.reduce((total, value) => total + value, 0);
+  const options = { level, version, sleepingBag, foodBuff, dailyHours, includeRested, faction, dungeonMode };
+  const expectedPlayedMinutes = sum(referenceMinutesPerLevel.slice(0, level - 1));
+  const rawMultiplier = played > 0 && expectedPlayedMinutes > 0 ? played * 60 / expectedPlayedMinutes : 1;
+  const playerMultiplier = 0.85 + rawMultiplier * 0.15;
+  const levelMinutes = referenceMinutesPerLevel.map((minutes, i) => minutes * playerMultiplier / getXpBoost(i + 1, options).total);
+  const dungeonResult = getDungeonAdjustments(options, levelMinutes);
+  const baseRemainingMinutes = sum(levelMinutes.slice(level - 1));
+  let remainingMinutes = 0;
+  const points = [{ x: 0, y: level }];
+  for (let lvl = level; lvl < 60; lvl++) {
+    remainingMinutes += levelMinutes[lvl - 1] - dungeonResult.adjustments[lvl - 1];
+    points.push({ x: remainingMinutes / 60 / dailyHours, y: lvl + 1 });
+  }
+  return {
+    remainingXP: sum(xpPerLevel.slice(level - 1)), expectedPlayedMinutes, playerMultiplier,
+    restedBonus: includeRested ? getRestedBonus(dailyHours) : 0,
+    referenceRemainingMinutes: sum(referenceMinutesPerLevel.slice(level - 1)), baseRemainingMinutes,
+    dungeonAdjustmentMinutes: sum(dungeonResult.adjustments),
+    dungeonBreakdown: dungeonResult.breakdown,
+    remainingMinutes, daysRequired: remainingMinutes / 60 / dailyHours,
+    totalPlayedMinutes: played > 0 || level === 1 ? played * 60 + remainingMinutes : null, points
+  };
+}
+
+function formatDuration(minutes, useDays = false, language = 'en') {
+  const rounded = Math.round(Math.abs(minutes));
+  const days = useDays ? Math.floor(rounded / 1440) : 0;
+  const hours = Math.floor((rounded - days * 1440) / 60);
+  const units = language === 'ru' ? ['д', 'ч', 'мин'] : ['d', 'h', 'm'];
+  return `${useDays ? `${days}${units[0]} ` : ''}${hours}${units[1]} ${rounded % 60}${units[2]}`;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration,
+    getXpBoost, getDungeonAdjustments, getDungeonExtraXP };
 }
