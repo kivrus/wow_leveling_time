@@ -76,6 +76,24 @@ test('Sleeping Bag starts at 14, food affects kills only, Vanilla ignores buffs'
   close(getXpBoost(30,{...forever,version:'vanilla',foodBuff:true,sleepingBag:true}).total,1);
 });
 
+test('Sleeping Bag setup costs time only from level 14 and stays aligned with dungeon savings',()=>{
+  const off = baseline(14, forever);
+  const bag = baseline(14, {...forever, sleepingBag:true});
+  close(bag.remainingMinutes, off.remainingMinutes * 123 / 120 / 1.03);
+  assert.ok(bag.remainingMinutes < off.remainingMinutes);
+  assert.ok(bag.remainingMinutes > off.remainingMinutes / 1.03);
+  const from13 = baseline(13, {...forever, sleepingBag:true});
+  close(from13.remainingMinutes - bag.remainingMinutes, referenceMinutesPerLevel[12]);
+  close(baseline(1, {sleepingBag:true}).remainingMinutes, baseline(1).remainingMinutes);
+  for (const dungeonMode of ['off','typical','all']) {
+    const options = {...forever, sleepingBag:true, dungeonMode};
+    const result = baseline(14, options);
+    close(result.remainingMinutes, baseline(14, {...options, dailyHours:6}).remainingMinutes);
+    close(result.points.at(-1).x * 120, result.remainingMinutes);
+    close(result.baseRemainingMinutes-result.dungeonAdjustmentMinutes, result.remainingMinutes);
+  }
+});
+
 test('35 distinct dungeons, nine new, with valid level ranges and no duplicate package XP',()=>{
   assert.equal(dungeonData.length,35);
   assert.equal(new Set(dungeonData.map(d=>d.id)).size,35);

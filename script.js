@@ -89,7 +89,12 @@ function calculateProjection({ level, played = 0, dailyHours, includeRested = tr
   const expectedPlayedMinutes = sum(referenceMinutesPerLevel.slice(0, level - 1));
   const rawMultiplier = played > 0 && expectedPlayedMinutes > 0 ? played * 60 / expectedPlayedMinutes : 1;
   const playerMultiplier = 0.85 + rawMultiplier * 0.15;
-  const levelMinutes = referenceMinutesPerLevel.map((minutes, i) => minutes * playerMultiplier / getXpBoost(i + 1, options).total);
+  const levelMinutes = referenceMinutesPerLevel.map((minutes, i) => {
+    // Amortize 3 minutes of setup per 120 active buff minutes, without rounding
+    // separately at each level or restarting the cycle every play session.
+    const bagTimeFactor = version === 'forever' && sleepingBag && i + 1 >= 14 ? 123 / 120 : 1;
+    return minutes * playerMultiplier / getXpBoost(i + 1, options).total * bagTimeFactor;
+  });
   const dungeonResult = getDungeonAdjustments(options, levelMinutes);
   const baseRemainingMinutes = sum(levelMinutes.slice(level - 1));
   let remainingMinutes = 0;

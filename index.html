@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="style.css?v=6">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script defer src="dungeons.js?v=5"></script>
-  <script defer src="script.js?v=5"></script>
-  <script defer src="ui.js?v=5"></script>
+  <script defer src="script.js?v=7"></script>
+  <script defer src="ui.js?v=7"></script>
 </head>
 <body>
   <main>
@@ -31,7 +31,7 @@
           <label><span data-i18n="dailyHours">Часов в день</span><input type="number" id="dailyHours" min="0.1" max="24" step="any" value="2" required></label>
         </div>
         <fieldset id="foreverOptions" hidden disabled>
-          <label class="check"><input type="checkbox" id="sleepingBag" checked><span>Sleeping Bag <small data-i18n="bag">+3% XP, с 14 ур.</small></span></label>
+          <label class="check"><input type="checkbox" id="sleepingBag" checked><span>Sleeping Bag <small data-i18n="bag">+3% XP с 14 ур.; 3 мин отдыха / 2 ч</small></span></label>
           <label class="check"><input type="checkbox" id="foodBuff" checked><span>Food EXP Buff <small data-i18n="food">+5% XP за убийства</small></span></label>
           <label><span data-i18n="faction">Фракция</span><select id="faction"><option value="alliance" data-i18n="alliance">Альянс</option><option value="horde" data-i18n="horde">Орда</option></select></label>
           <label><span data-i18n="dungeons">Данжи</span><select id="dungeonMode"><option value="off" data-i18n="off">Выключены</option><option value="typical" data-i18n="typical">Обычный маршрут</option><option value="all" data-i18n="all">Все первые заходы</option></select></label>

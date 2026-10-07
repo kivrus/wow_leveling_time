@@ -26,6 +26,7 @@ The pace factor is 1 when `/played` is missing or zero, or the character is leve
 
 - **Rested:** adds `0.4 × (24 − daily playtime) / 8 × 0.05` to the XP multiplier. This approximates logging out in an inn or city without simulating the rested pool or its consumption.
 - **Buffs:** Sleeping Bag adds 3% to all XP from level 14; Food adds 5% to kill XP. Kills are assumed to provide 40% of total XP, and bonuses are additive.
+- **Sleeping Bag setup:** from level 14, time with the buff is multiplied by `123 / 120` to allow 3 minutes of rest per 2 hours of active buff time. This is an averaged cost, without rounding at level or session boundaries; the first and final partial cycles are not simulated.
 - **Dungeons:** extra quest rewards are distributed across level brackets 13–20 / 20–30 / 30–40 / 40–50 / 50–60. The reduction is `min(0.30, route extra XP × 0.40 × attendance / bracket XP)`. Attendance is 0 / 0.65 / 1 for the three modes. The 0.40 factor accounts for time costs and low mob XP; route quest coverage is 100% / 100% / 100% / 90% / 50% across the brackets.
 
 Coefficients are modeling assumptions. Dungeon data, especially above level 30, are estimates. Classes and professions are not modeled separately.
