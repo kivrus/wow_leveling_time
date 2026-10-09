@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration, accrueRestedXP, simulateProgress } = require('./script.js');
+const { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration, accrueRestedXP, simulateProgress,
+  getRestedEfficiency, getLocalDateString, getCalendarDate, getMilestoneDates } = require('./script.js');
 const baseline = (level, extra = {}) => calculateProjection({ level, dailyHours: 2, includeRested: false, ...extra });
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 
@@ -107,8 +108,86 @@ test('rested benefit is bounded, depends on level pace, and preserves daily-time
   const earlyBaseline = referenceMinutesPerLevel.slice(14,19).reduce((a,b)=>a+b,0);
   assert.ok(1 - oneHour.remainingMinutes/noRest.remainingMinutes > 1 - earlyTime/earlyBaseline);
   close(baseline(1, {includeRested:true}).initialRestedXP, 0);
-  close(oneHour.initialRestedXP, xpPerLevel[49]*23*0.025/8);
+  close(oneHour.initialRestedXP, xpPerLevel[49]*23*0.025/8*getRestedEfficiency(50));
   for (const initialRestedXP of [-1, NaN, Infinity]) assert.throws(()=>baseline(50,{initialRestedXP}), RangeError);
+});
+
+test('rested calibration is smooth, bounded, and only affects new accrual', () => {
+  for(let level=1;level<=60;level++) {
+    const efficiency=getRestedEfficiency(level);
+    assert.ok(efficiency>0 && efficiency<1);
+    if(level>1) assert.ok(efficiency>getRestedEfficiency(level-1));
+  }
+  assert.ok(getRestedEfficiency(15)<0.3);
+  assert.ok(getRestedEfficiency(60)>0.8);
+  close(accrueRestedXP(500,10000,8,getRestedEfficiency(15)),500+250*getRestedEfficiency(15));
+  close(accrueRestedXP(500,10000,0,getRestedEfficiency(15)),500);
+  close(baseline(15,{includeRested:true,initialRestedXP:500}).initialRestedXP,500);
+  assert.deepEqual(baseline(15,{initialRestedXP:500}),baseline(15));
+  close(baseline(1).remainingMinutes,8990);
+});
+
+test('nightly accrual and both repeated-cycle optimizations use calibrated efficiency', () => {
+  for(const level of [15,38,59]) {
+    const nightly=1000*23*0.025/8*getRestedEfficiency(level);
+    const depleted=simulateProgress([{level,xp:1000,xpPerMinute:1,killXpPerMinute:0.4}],
+      {dailyHours:1,includeRested:true,initialRestedXP:nightly});
+    // Each full session earns 60 normal XP plus its nightly pool (all consumed).
+    if(nightly<=24) {
+      const complete=Math.ceil(1000/(60+nightly))-1;
+      const left=1000-complete*(60+nightly);
+      const finalMinutes=left<=nightly/0.4*1.4?left/1.4:left-nightly;
+      close(depleted.levelMinutes[0],complete*60+finalMinutes);
+    }
+    // Slow progression with a full pool remains rested throughout, across
+    // many capped/replenished cycles regardless of the utilization factor.
+    const full=simulateProgress([{level,xp:1000,xpPerMinute:1/6,killXpPerMinute:1/15}],
+      {dailyHours:1,includeRested:true,initialRestedXP:750});
+    close(full.levelMinutes[0],1000/(1/6+1/15));
+  }
+});
+
+test('validation checkpoints stay in broad sanity ranges without retuning other coefficients', () => {
+  for(const [level,played,target,min,max] of [[15,10,26,28,30],[26,31,31,42,44],[31,45,37,60,62],
+    [37,61,50,100,102],[50,99,60,134,136]]) {
+    const result=calculateProjection({level,played,dailyHours:1});
+    const total=played+result.points.find(p=>p.y===target).x;
+    assert.ok(total>min && total<max,`${level} -> ${target}: ${total}`);
+  }
+  const full=calculateProjection({level:1,played:0,dailyHours:1});
+  assert.ok(full.remainingMinutes/60>130 && full.remainingMinutes/60<133);
+});
+
+test('calendar uses the chosen date as session one and rounds fractional sessions up', () => {
+  for(const [days,expected] of [[0,'2026-10-09'],[1,'2026-10-09'],[2,'2026-10-10'],
+    [30,'2026-11-07'],[30.2,'2026-11-08']]) {
+    assert.equal(getLocalDateString(getCalendarDate('2026-10-09',days)),expected);
+  }
+});
+
+test('calendar handles month/year/leap-day and DST transitions in local time', () => {
+  for(const [start,days,expected] of [['2026-01-31',2,'2026-02-01'],['2026-12-31',2,'2027-01-01'],
+    ['2028-02-28',2,'2028-02-29'],['2028-02-28',3,'2028-03-01'],['2027-02-28',2,'2027-03-01'],
+    ['2026-03-28',3,'2026-03-30'],['2026-10-24',3,'2026-10-26']]) {
+    assert.equal(getLocalDateString(getCalendarDate(start,days)),expected);
+  }
+  assert.equal(getLocalDateString(new Date(2026,9,9,0,15)),'2026-10-09');
+  assert.equal(getLocalDateString(new Date(2026,9,9,23,45)),'2026-10-09');
+  for(const value of ['', '2026-02-30','2027-02-29','0000-01-01','2026-13-01']) {
+    assert.throws(()=>getCalendarDate(value,1),RangeError);
+  }
+});
+
+test('calendar reads existing graph points without changing the projection', () => {
+  const result=calculateProjection({level:37,played:61,dailyHours:1});
+  const before=structuredClone(result);
+  const first=getMilestoneDates(result.points,'2026-10-09');
+  const later=getMilestoneDates(result.points,'2026-12-01');
+  assert.deepEqual(first.map(m=>m.level),[40,50,60]);
+  first.forEach((m,i)=>assert.notEqual(m.date.getTime(),later[i].date.getTime()));
+  assert.equal(first.at(-1).date.getTime(),getCalendarDate('2026-10-09',result.daysRequired).getTime());
+  assert.deepEqual(result,before);
+  assert.deepEqual(getMilestoneDates(calculateProjection({level:50,dailyHours:1}).points,'2026-10-09').map(m=>m.level),[60]);
 });
 
 test('every reached level is plotted and the endpoint matches the estimate', () => {

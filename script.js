@@ -32,8 +32,12 @@ const KILL_XP_FRACTION = 0.4; // Planning assumption; the rest is quests/explora
 // 5% of a bar per 8h and a 150% bar cap correspond to 2.5% and 75% bonus XP.
 const RESTED_BONUS_PER_HOUR = 0.025 / 8;
 const RESTED_BONUS_CAP = 0.75;
-function accrueRestedXP(pool, levelXP, offlineHours) {
-  return Math.min(levelXP * RESTED_BONUS_CAP, pool + levelXP * offlineHours * RESTED_BONUS_PER_HOUR);
+// Forecast calibration for imperfect rest usage, not an in-game level bonus.
+function getRestedEfficiency(level) {
+  return 0.25 + 0.60 / (1 + Math.exp(-(level - 38) / 8));
+}
+function accrueRestedXP(pool, levelXP, offlineHours, restedEfficiency = 1) {
+  return Math.min(levelXP * RESTED_BONUS_CAP, pool + levelXP * offlineHours * RESTED_BONUS_PER_HOUR * restedEfficiency);
 }
 
 function getXpBoost(level, { version = 'vanilla', sleepingBag = false, foodBuff = false }) {
@@ -53,20 +57,22 @@ function simulateProgress(segments, { dailyHours, includeRested, initialRestedXP
   let pool = includeRested ? Math.min(initialRestedXP, segments[0].xp * RESTED_BONUS_CAP) : 0;
   let restedXP = 0;
   const levelMinutes = [];
-  for (const { xp, xpPerMinute, killXpPerMinute } of segments) {
+  for (const { level, xp, xpPerMinute, killXpPerMinute } of segments) {
     if (!includeRested) {
       levelMinutes.push(xp / xpPerMinute);
       continue;
     }
+    // Synthetic segments without a level retain raw mechanics for unit tests.
+    const efficiency = level === undefined ? 1 : getRestedEfficiency(level);
     let xpLeft = xp, minutes = 0;
     while (xpLeft > xp * 1e-12) {
       if (sessionLeft < 1e-9) {
-        pool = accrueRestedXP(pool, xp, offlineHours);
+        pool = accrueRestedXP(pool, xp, offlineHours, efficiency);
         sessionLeft = sessionMinutes;
       }
       // Skip identical full sessions within this level, including very slow
       // /played inputs. A cycle repeats if it consumes exactly the nightly gain.
-      const nightlyXP = accrueRestedXP(0, xp, offlineHours);
+      const nightlyXP = accrueRestedXP(0, xp, offlineHours, efficiency);
       if (sessionLeft === sessionMinutes && Math.abs(pool - nightlyXP) < 1e-9
           && pool <= killXpPerMinute * sessionMinutes) {
         const sessionXP = xpPerMinute * sessionMinutes + pool;
@@ -159,13 +165,13 @@ function calculateProjection({ level, played = 0, dailyHours, includeRested = tr
   // Unknown current reserve: one normal rest interval for existing characters,
   // zero for a fresh level-1 character. API overrides use bonus-XP units.
   const startingPool = includeRested ? Math.min(initialRestedXP ?? (level === 1 ? 0
-    : accrueRestedXP(0, xpPerLevel[level - 1], 24 - dailyHours)), xpPerLevel[level - 1] * RESTED_BONUS_CAP) : 0;
+    : accrueRestedXP(0, xpPerLevel[level - 1], 24 - dailyHours, getRestedEfficiency(level))), xpPerLevel[level - 1] * RESTED_BONUS_CAP) : 0;
   const simulationOptions = { dailyHours, includeRested, initialRestedXP: startingPool };
   const segments = levelMinutes.slice(level - 1).map((minutes, offset) => {
     const i = level - 1 + offset;
     const boost = getXpBoost(i + 1, options);
     const xp = xpPerLevel[i];
-    return { xp, xpPerMinute: xp / minutes,
+    return { level: i + 1, xp, xpPerMinute: xp / minutes,
       killXpPerMinute: xp / minutes / boost.total * KILL_XP_FRACTION * boost.mob };
   });
   // Keep the existing dungeon reduction as a non-rested route adjustment.
@@ -198,6 +204,29 @@ function calculateProjection({ level, played = 0, dailyHours, includeRested = tr
   };
 }
 
+function getLocalDateString(date = new Date()) {
+  return `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function getCalendarDate(startDate, daysFromStart) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) throw new RangeError('startDate');
+  const [year, month, day] = startDate.split('-').map(Number);
+  // Local noon and calendar arithmetic avoid UTC parsing and DST-hour offsets.
+  const date = new Date(0);
+  date.setHours(12, 0, 0, 0);
+  date.setFullYear(year, month - 1, day);
+  if (year < 1 || date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day
+      || !Number.isFinite(daysFromStart) || daysFromStart < 0) throw new RangeError('startDate');
+  date.setDate(date.getDate() + Math.max(0, Math.ceil(daysFromStart) - 1));
+  if (!Number.isFinite(date.getTime())) throw new RangeError('startDate');
+  return date;
+}
+
+function getMilestoneDates(points, startDate) {
+  return points.filter(point => point.y > points[0].y && [20, 30, 40, 50, 60].includes(point.y))
+    .map(point => ({ level: point.y, date: getCalendarDate(startDate, point.x) }));
+}
+
 function formatDuration(minutes, useDays = false, language = 'en') {
   const rounded = Math.round(Math.abs(minutes));
   const days = useDays ? Math.floor(rounded / 1440) : 0;
@@ -207,5 +236,6 @@ function formatDuration(minutes, useDays = false, language = 'en') {
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration,
-    getXpBoost, getDungeonAdjustments, getDungeonExtraXP, accrueRestedXP, simulateProgress };
+    getXpBoost, getDungeonAdjustments, getDungeonExtraXP, accrueRestedXP, simulateProgress, getRestedEfficiency,
+    getLocalDateString, getCalendarDate, getMilestoneDates };
 }
