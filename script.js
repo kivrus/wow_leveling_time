@@ -28,18 +28,77 @@ const dungeonModel = typeof module !== 'undefined' && module.exports
   ? require('./dungeons.js') : { dungeonData, dungeonBlocks, DUNGEON_EFFECTIVE_FACTOR, DUNGEON_TYPICAL_FACTOR };
 const KILL_XP_FRACTION = 0.4; // Planning assumption; the rest is quests/exploration.
 
-// Existing approximation retained. Assume logout in a rested area between sessions.
-function getRestedBonus(dailyHours) {
-  return KILL_XP_FRACTION * Math.max(0, 24 - dailyHours) / 8 * 0.05;
+// Store BONUS XP, not the blue bar's total (normal + bonus) kill XP.
+// 5% of a bar per 8h and a 150% bar cap correspond to 2.5% and 75% bonus XP.
+const RESTED_BONUS_PER_HOUR = 0.025 / 8;
+const RESTED_BONUS_CAP = 0.75;
+function accrueRestedXP(pool, levelXP, offlineHours) {
+  return Math.min(levelXP * RESTED_BONUS_CAP, pool + levelXP * offlineHours * RESTED_BONUS_PER_HOUR);
 }
 
-function getXpBoost(level, { version = 'vanilla', sleepingBag = false, foodBuff = false, dailyHours, includeRested = true }) {
-  const rested = includeRested ? getRestedBonus(dailyHours) : 0;
+function getXpBoost(level, { version = 'vanilla', sleepingBag = false, foodBuff = false }) {
   const bag = version === 'forever' && sleepingBag && level >= 14 ? 0.03 : 0;
   const food = version === 'forever' && foodBuff ? 0.05 : 0;
   // Additive bonuses are a modeling assumption, not a verified in-game stacking rule.
-  return { total: 1 + rested + bag + KILL_XP_FRACTION * food,
-    quest: 1 + bag, mob: 1 + rested / KILL_XP_FRACTION + bag + food };
+  return { total: 1 + bag + KILL_XP_FRACTION * food,
+    quest: 1 + bag, mob: 1 + bag + food };
+}
+
+// Advance only to a level-up, pool depletion, or session end; no per-mob loop.
+// Session time and the absolute XP reserve carry across level boundaries.
+function simulateProgress(segments, { dailyHours, includeRested, initialRestedXP = 0 }) {
+  const sessionMinutes = dailyHours * 60;
+  const offlineHours = 24 - dailyHours;
+  let sessionLeft = sessionMinutes;
+  let pool = includeRested ? Math.min(initialRestedXP, segments[0].xp * RESTED_BONUS_CAP) : 0;
+  let restedXP = 0;
+  const levelMinutes = [];
+  for (const { xp, xpPerMinute, killXpPerMinute } of segments) {
+    if (!includeRested) {
+      levelMinutes.push(xp / xpPerMinute);
+      continue;
+    }
+    let xpLeft = xp, minutes = 0;
+    while (xpLeft > xp * 1e-12) {
+      if (sessionLeft < 1e-9) {
+        pool = accrueRestedXP(pool, xp, offlineHours);
+        sessionLeft = sessionMinutes;
+      }
+      // Skip identical full sessions within this level, including very slow
+      // /played inputs. A cycle repeats if it consumes exactly the nightly gain.
+      const nightlyXP = accrueRestedXP(0, xp, offlineHours);
+      if (sessionLeft === sessionMinutes && Math.abs(pool - nightlyXP) < 1e-9
+          && pool <= killXpPerMinute * sessionMinutes) {
+        const sessionXP = xpPerMinute * sessionMinutes + pool;
+        const cycles = Math.max(0, Math.ceil(xpLeft / sessionXP) - 1);
+        if (cycles > 0) {
+          xpLeft -= cycles * sessionXP;
+          minutes += cycles * sessionMinutes;
+          restedXP += cycles * pool;
+        }
+      } else if (sessionLeft === sessionMinutes && nightlyXP >= killXpPerMinute * sessionMinutes
+          && pool >= killXpPerMinute * sessionMinutes) {
+        const consumed = killXpPerMinute * sessionMinutes;
+        const sessionXP = xpPerMinute * sessionMinutes + consumed;
+        const cycles = Math.max(0, Math.ceil(xpLeft / sessionXP) - 1);
+        xpLeft -= cycles * sessionXP;
+        minutes += cycles * sessionMinutes;
+        restedXP += cycles * consumed;
+        pool = Math.min(xp * RESTED_BONUS_CAP, pool + cycles * (nightlyXP - consumed));
+      }
+      const bonusRate = pool > 1e-9 ? killXpPerMinute : 0;
+      const rate = xpPerMinute + bonusRate;
+      const step = Math.min(sessionLeft, xpLeft / rate, bonusRate > 0 ? pool / bonusRate : Infinity);
+      const bonus = Math.min(pool, bonusRate * step);
+      xpLeft = Math.max(0, xpLeft - xpPerMinute * step - bonus);
+      pool = Math.max(0, pool - bonus);
+      restedXP += bonus;
+      minutes += step;
+      sessionLeft = Math.max(0, sessionLeft - step);
+    }
+    levelMinutes.push(minutes);
+  }
+  return { levelMinutes, restedXP, remainingRestedXP: pool };
 }
 
 function getDungeonExtraXP(dungeon, faction) {
@@ -77,11 +136,12 @@ function getDungeonAdjustments({ level, faction, dungeonMode, version }, levelMi
   return { adjustments, breakdown };
 }
 
-function calculateProjection({ level, played = 0, dailyHours, includeRested = true,
+function calculateProjection({ level, played = 0, dailyHours, includeRested = true, initialRestedXP,
   version = 'vanilla', sleepingBag = false, foodBuff = false, faction = 'alliance', dungeonMode = 'off' }) {
   if (!Number.isInteger(level) || level < 1 || level > 59) throw new RangeError('level');
   if (!Number.isFinite(played) || played < 0 || played > 1000000) throw new RangeError('played');
   if (!Number.isFinite(dailyHours) || dailyHours < 0.1 || dailyHours > 24) throw new RangeError('dailyHours');
+  if (initialRestedXP !== undefined && (!Number.isFinite(initialRestedXP) || initialRestedXP < 0)) throw new RangeError('initialRestedXP');
   if (!['vanilla', 'forever'].includes(version) || !['alliance', 'horde'].includes(faction)
       || !['off', 'typical', 'all'].includes(dungeonMode)) throw new RangeError('settings');
   const sum = values => values.reduce((total, value) => total + value, 0);
@@ -96,19 +156,43 @@ function calculateProjection({ level, played = 0, dailyHours, includeRested = tr
     return minutes * playerMultiplier / getXpBoost(i + 1, options).total * bagTimeFactor;
   });
   const dungeonResult = getDungeonAdjustments(options, levelMinutes);
-  const baseRemainingMinutes = sum(levelMinutes.slice(level - 1));
+  // Unknown current reserve: one normal rest interval for existing characters,
+  // zero for a fresh level-1 character. API overrides use bonus-XP units.
+  const startingPool = includeRested ? Math.min(initialRestedXP ?? (level === 1 ? 0
+    : accrueRestedXP(0, xpPerLevel[level - 1], 24 - dailyHours)), xpPerLevel[level - 1] * RESTED_BONUS_CAP) : 0;
+  const simulationOptions = { dailyHours, includeRested, initialRestedXP: startingPool };
+  const segments = levelMinutes.slice(level - 1).map((minutes, offset) => {
+    const i = level - 1 + offset;
+    const boost = getXpBoost(i + 1, options);
+    const xp = xpPerLevel[i];
+    return { xp, xpPerMinute: xp / minutes,
+      killXpPerMinute: xp / minutes / boost.total * KILL_XP_FRACTION * boost.mob };
+  });
+  // Keep the existing dungeon reduction as a non-rested route adjustment.
+  // Its extra quest XP must not generate extra rested kill XP.
+  const dungeonSegments = segments.map((segment, offset) => ({ ...segment,
+    xpPerMinute: segment.xp / (levelMinutes[level - 1 + offset] - dungeonResult.adjustments[level - 1 + offset]) }));
+  const withoutDungeons = simulateProgress(segments, simulationOptions);
+  const route = simulateProgress(dungeonSegments, simulationOptions);
+  const baseRemainingMinutes = sum(withoutDungeons.levelMinutes);
   let remainingMinutes = 0;
   const points = [{ x: 0, y: level }];
   for (let lvl = level; lvl < 60; lvl++) {
-    remainingMinutes += levelMinutes[lvl - 1] - dungeonResult.adjustments[lvl - 1];
+    remainingMinutes += route.levelMinutes[lvl - level];
     points.push({ x: remainingMinutes / 60 / dailyHours, y: lvl + 1 });
   }
+  const unrestedMinutes = sum(levelMinutes.slice(level - 1)) - sum(dungeonResult.adjustments);
+  const dungeonBreakdown = dungeonResult.breakdown.map(block => ({ ...block,
+    savedMinutes: sum(withoutDungeons.levelMinutes.slice(Math.max(level, block.minLevel) - level, block.maxLevel - level))
+      - sum(route.levelMinutes.slice(Math.max(level, block.minLevel) - level, block.maxLevel - level)) }));
   return {
     remainingXP: sum(xpPerLevel.slice(level - 1)), expectedPlayedMinutes, playerMultiplier,
-    restedBonus: includeRested ? getRestedBonus(dailyHours) : 0,
+    restedBonus: unrestedMinutes / remainingMinutes - 1,
+    restedSavedMinutes: unrestedMinutes - remainingMinutes,
+    initialRestedXP: startingPool, restedXP: route.restedXP, remainingRestedXP: route.remainingRestedXP,
     referenceRemainingMinutes: sum(referenceMinutesPerLevel.slice(level - 1)), baseRemainingMinutes,
-    dungeonAdjustmentMinutes: sum(dungeonResult.adjustments),
-    dungeonBreakdown: dungeonResult.breakdown,
+    dungeonAdjustmentMinutes: baseRemainingMinutes - remainingMinutes,
+    dungeonBreakdown,
     remainingMinutes, daysRequired: remainingMinutes / 60 / dailyHours,
     totalPlayedMinutes: played > 0 || level === 1 ? played * 60 + remainingMinutes : null, points
   };
@@ -123,5 +207,5 @@ function formatDuration(minutes, useDays = false, language = 'en') {
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration,
-    getXpBoost, getDungeonAdjustments, getDungeonExtraXP };
+    getXpBoost, getDungeonAdjustments, getDungeonExtraXP, accrueRestedXP, simulateProgress };
 }

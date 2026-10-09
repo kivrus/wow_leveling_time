@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration } = require('./script.js');
+const { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration, accrueRestedXP, simulateProgress } = require('./script.js');
 const baseline = (level, extra = {}) => calculateProjection({ level, dailyHours: 2, includeRested: false, ...extra });
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 
@@ -29,11 +29,86 @@ test('played modifies time in the right direction with a 15% blend', () => {
 test('rested remains separate; daily hours affect days but not unboosted time', () => {
   const ref = baseline(40);
   const rested = baseline(40, { includeRested: true });
-  close(rested.restedBonus, 0.055);
-  close(rested.remainingMinutes, ref.remainingMinutes / 1.055);
+  assert.ok(rested.remainingMinutes < ref.remainingMinutes);
+  close(rested.restedBonus, ref.remainingMinutes / rested.remainingMinutes - 1);
   close(baseline(40, { dailyHours: 24, includeRested: true }).remainingMinutes, ref.remainingMinutes);
   assert.equal(baseline(40, { dailyHours: 0.5 }).remainingMinutes, ref.remainingMinutes);
   close(baseline(40, { dailyHours: 0.5 }).daysRequired, ref.daysRequired * 4);
+});
+
+test('rested bar units, overnight accumulation, and ten-day cap', () => {
+  close(accrueRestedXP(0, 10000, 8), 250); // 500 displayed XP = 250 normal + 250 bonus.
+  close(accrueRestedXP(0, 10000, 23), 718.75);
+  close(accrueRestedXP(0, 10000, 240), 7500);
+  close(accrueRestedXP(7400, 10000, 1000), 7500);
+  close(accrueRestedXP(250, 10000, 0), 250);
+});
+
+test('pool depletes on kills only, never on quest XP', () => {
+  const segment = {xp:1000, xpPerMinute:10, killXpPerMinute:4};
+  const options = {dailyHours:24, includeRested:true, initialRestedXP:100};
+  const depleted = simulateProgress([segment], options);
+  close(depleted.levelMinutes[0], 90); // 100 bonus XP replaces ten minutes.
+  close(depleted.restedXP, 100);
+  close(depleted.remainingRestedXP, 0);
+  const quests = simulateProgress([{...segment, killXpPerMinute:0}], options);
+  close(quests.levelMinutes[0], 100);
+  close(quests.remainingRestedXP, 100);
+  const full = simulateProgress([segment], {...options, initialRestedXP:750});
+  close(full.levelMinutes[0], 100/1.4);
+});
+
+test('sessions span levels, reserve stays in absolute XP, and partial final sessions do not accrue rest', () => {
+  const options = {dailyHours:1, includeRested:true, initialRestedXP:0};
+  const segments = [
+    {xp:300, xpPerMinute:10, killXpPerMinute:4}, // 30 minutes, no rest.
+    {xp:1000, xpPerMinute:10, killXpPerMinute:4}
+  ];
+  const result = simulateProgress(segments, options);
+  // At minute 60: +71.875 bonus XP, spent before next rest at minute 120.
+  // The next session starts with 71.875 more, and finishes while still rested.
+  const finalXP = 1000 - 300 - 600 - 71.875;
+  close(result.levelMinutes[0], 30);
+  close(result.levelMinutes[1], 90 + finalXP / 14);
+  close(result.remainingRestedXP, 71.875 - finalXP / 14 * 4);
+  const carry = simulateProgress([
+    {xp:100, xpPerMinute:10, killXpPerMinute:0},
+    {xp:1000, xpPerMinute:10, killXpPerMinute:4}
+  ], {...options, dailyHours:24, initialRestedXP:50});
+  close(carry.levelMinutes[1], 95); // Pool does not grow tenfold at a level-up.
+});
+
+test('repeated sessions remain accurate when the pool caps or empties', () => {
+  const options = {dailyHours:1, includeRested:true, initialRestedXP:0};
+  // Quest-only progress takes exactly 100 sessions; the reserve caps at 750.
+  const questOnly = simulateProgress([{xp:1000, xpPerMinute:1/6, killXpPerMinute:0}], options);
+  close(questOnly.levelMinutes[0], 6000);
+  close(questOnly.remainingRestedXP, 750);
+  // Same-rate levels have identical time to one continuous level when there
+  // is no nightly refill (24h/day), even if the initial pool runs out midway.
+  const whole = simulateProgress([{xp:2000, xpPerMinute:1, killXpPerMinute:0.4}], {...options,dailyHours:24,initialRestedXP:100});
+  const split = simulateProgress(Array(2).fill({xp:1000,xpPerMinute:1,killXpPerMinute:0.4}), {...options,dailyHours:24,initialRestedXP:100});
+  close(split.levelMinutes.reduce((a,b)=>a+b,0), whole.levelMinutes[0]);
+  const extreme = baseline(2, {played:1000000,dailyHours:0.1,includeRested:true});
+  assert.ok(Number.isFinite(extreme.remainingMinutes));
+  assert.ok(extreme.remainingMinutes > 0);
+});
+
+test('rested benefit is bounded, depends on level pace, and preserves daily-time semantics', () => {
+  const noRest = baseline(50, {played:99});
+  const oneHour = baseline(50, {played:99, dailyHours:1, includeRested:true});
+  const sixHours = baseline(50, {played:99, dailyHours:6, includeRested:true});
+  assert.ok(oneHour.remainingMinutes < sixHours.remainingMinutes);
+  assert.ok(oneHour.daysRequired > sixHours.daysRequired);
+  assert.ok(oneHour.remainingMinutes >= noRest.remainingMinutes / 1.4);
+  close(oneHour.playerMultiplier, noRest.playerMultiplier);
+  const early = baseline(15, {dailyHours:1, includeRested:true});
+  const earlyTime = early.points.find(p=>p.y===20).x * 60;
+  const earlyBaseline = referenceMinutesPerLevel.slice(14,19).reduce((a,b)=>a+b,0);
+  assert.ok(1 - oneHour.remainingMinutes/noRest.remainingMinutes > 1 - earlyTime/earlyBaseline);
+  close(baseline(1, {includeRested:true}).initialRestedXP, 0);
+  close(oneHour.initialRestedXP, xpPerLevel[49]*23*0.025/8);
+  for (const initialRestedXP of [-1, NaN, Infinity]) assert.throws(()=>baseline(50,{initialRestedXP}), RangeError);
 });
 
 test('every reached level is plotted and the endpoint matches the estimate', () => {

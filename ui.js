@@ -4,7 +4,7 @@ const english = {
   dungeons:'Dungeons',off:'Off',typical:'Typical',all:'All first runs',calculate:'Calculate',
   remaining:'Time to level 60',days:'Days of play',xp:'Remaining XP',saved:'Dungeon time saved ≈',
   chartFallback:'The chart could not load. The calculation still works.',
-  note:'Baseline: ~150h. Rested included. /played adjusts your pace. Dungeons are estimated, especially after level 30.'
+  note:'Baseline: ~150h. Rested assumes daily inn logout. /played adjusts your pace. Dungeons are estimated, especially after level 30.'
 };
 const messages = {
   ru:{total:'Общий /played',dayAxis:'Дни игры',levelAxis:'Уровень',game:'Версия игры',language:'Язык',results:'Результаты',
