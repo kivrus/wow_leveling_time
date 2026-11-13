@@ -5,6 +5,38 @@ const { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuratio
 const baseline = (level, extra = {}) => calculateProjection({ level, dailyHours: 2, includeRested: false, ...extra });
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 
+test('/played view adds known past time and preserves the original forecast and calendar days', () => {
+  const {getProgressView}=require('./script.js');
+  const result=calculateProjection({level:37,played:61,dailyHours:2});
+  const before=structuredClone(result);
+  const view=getProgressView(result,'played');
+  assert.equal(view.hasTotalPlayed,true);
+  close(view.points[0].x,61);
+  close(view.points.at(-1).x*60,result.totalPlayedMinutes);
+  view.points.forEach((p,i)=>{
+    close(p.daysFromStart,result.points[i].x);
+    close(p.playedMinutes,61*60+result.points[i].x*120);
+  });
+  assert.deepEqual(getProgressView(result,'days').points.map(({x,y})=>({x,y})),result.points);
+  assert.deepEqual(result,before);
+});
+
+test('/played view labels unknown past time as remaining; a fresh character starts at zero', () => {
+  const {getProgressView,formatPlayedTime}=require('./script.js');
+  const existing=calculateProjection({level:37,dailyHours:2});
+  const view=getProgressView(existing,'played');
+  assert.equal(view.hasTotalPlayed,false);
+  close(view.points[0].x,0);
+  close(view.points.at(-1).playedMinutes,existing.remainingMinutes);
+  assert.equal(getProgressView(calculateProjection({level:1,dailyHours:2}),'played').hasTotalPlayed,true);
+  assert.equal(formatPlayedTime(1890),'1d 7h 30m');
+  assert.equal(formatPlayedTime(1439.9),'1d');
+  assert.equal(formatPlayedTime(0),'0m');
+  assert.equal(formatPlayedTime(4445,'ru'),'3 д. 2 ч. 5 мин.');
+  assert.equal(formatPlayedTime(1439.9,'ru'),'1 д.');
+  assert.equal(formatPlayedTime(0,'ru'),'0 мин.');
+});
+
 test('reference totals and requested acceptance levels', () => {
   assert.equal(xpPerLevel.length, 59);
   assert.equal(referenceMinutesPerLevel.length, 59);

@@ -12,6 +12,7 @@ Uses your current level, `/played`, and daily playtime to calculate remaining ga
 - Forever: Sleeping Bag from level 14, Food EXP Buff, and faction selection.
 - Dungeons: Off, Typical, or All first runs with quests.
 - Start date, calendar ETA for level 60, milestone dates, and dates in chart tooltips.
+- Chart views by days or cumulative `/played`, with localized milestone times: `1d 7h 30m` (EN) or `1 д. 7 ч. 30 мин.` (RU). If current `/played` is unknown above level 1, the time view shows remaining playtime instead.
 
 ## Calculation
 

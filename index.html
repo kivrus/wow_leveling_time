@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WoW Leveling Calculator</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script defer src="dungeons.js?v=5"></script>
-  <script defer src="script.js?v=9"></script>
-  <script defer src="ui.js?v=9"></script>
+  <script defer src="script.js?v=11"></script>
+  <script defer src="ui.js?v=11"></script>
 </head>
 <body>
   <main>
@@ -48,10 +48,17 @@
           <div><span data-i18n="xp">Осталось XP</span><strong id="res-xp">—</strong></div>
           <div id="dungeonSaving" hidden><span data-i18n="saved">Экономия с данжами ≈</span><strong id="res-dungeon">—</strong></div>
         </div>
-        <p id="res-total"></p><p id="resultStatus" role="status" hidden></p>
+        <div class="chart-toolbar">
+          <p id="res-total"></p>
+          <div class="segmented" id="chartModes" aria-label="Вид графика">
+            <button type="button" data-chart-mode="days" aria-pressed="true" data-i18n="byDays">По дням</button>
+            <button type="button" data-chart-mode="played" aria-pressed="false" data-i18n="byPlayed">По /played</button>
+          </div>
+        </div>
+        <p id="playedHint" hidden></p><p id="resultStatus" role="status" hidden></p>
         <div id="chartWrapper"><canvas id="progressChart" role="img" aria-label="Level progression"></canvas></div>
         <p id="chartFallback" hidden data-i18n="chartFallback">График не загрузился. Расчёт работает.</p>
-        <div class="milestones" aria-live="polite"><span data-i18n="milestones">Ориентиры ≈</span><ul id="milestoneDates"></ul></div>
+        <div class="milestones" aria-live="polite"><span id="milestoneLabel" data-i18n="milestones">Ориентиры ≈</span><ul id="milestoneDates"></ul></div>
       </section>
     </div>
     <p class="model-note" data-i18n="note">База: ~150 ч. Rested: ежедневный выход в таверне. /played уточняет темп. Данжи — оценка, особенно после 30 уровня.</p>

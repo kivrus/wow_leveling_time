@@ -227,6 +227,28 @@ function getMilestoneDates(points, startDate) {
     .map(point => ({ level: point.y, date: getCalendarDate(startDate, point.x) }));
 }
 
+// Alternate views of the same forecast; never infer an unknown past /played.
+function getProgressView(result, mode = 'days') {
+  const hasTotalPlayed = result.totalPlayedMinutes !== null;
+  const pastMinutes = hasTotalPlayed ? result.totalPlayedMinutes - result.remainingMinutes : 0;
+  const minutesPerDay = result.remainingMinutes / result.daysRequired;
+  return {
+    hasTotalPlayed,
+    points: result.points.map(point => {
+      const playedMinutes = pastMinutes + point.x * minutesPerDay;
+      return { x: mode === 'played' ? playedMinutes / 60 : point.x, y: point.y,
+        daysFromStart: point.x, playedMinutes };
+    })
+  };
+}
+
+function formatPlayedTime(minutes, language = 'en') {
+  const rounded = Math.round(minutes);
+  const days = Math.floor(rounded / 1440), hours = Math.floor(rounded % 1440 / 60), mins = rounded % 60;
+  const units = language === 'ru' ? [' д.', ' ч.', ' мин.'] : ['d', 'h', 'm'];
+  return [days ? `${days}${units[0]}` : '', hours ? `${hours}${units[1]}` : '', mins || (!days && !hours) ? `${mins}${units[2]}` : ''].filter(Boolean).join(' ');
+}
+
 function formatDuration(minutes, useDays = false, language = 'en') {
   const rounded = Math.round(Math.abs(minutes));
   const days = useDays ? Math.floor(rounded / 1440) : 0;
@@ -237,5 +259,5 @@ function formatDuration(minutes, useDays = false, language = 'en') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { xpPerLevel, referenceMinutesPerLevel, calculateProjection, formatDuration,
     getXpBoost, getDungeonAdjustments, getDungeonExtraXP, accrueRestedXP, simulateProgress, getRestedEfficiency,
-    getLocalDateString, getCalendarDate, getMilestoneDates };
+    getLocalDateString, getCalendarDate, getMilestoneDates, getProgressView, formatPlayedTime };
 }
