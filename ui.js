@@ -2,6 +2,7 @@ const english = {
   title:'Leveling Time Calculator 1–60',level:'Current level',played:'/played, hours',dailyHours:'Hours per day',
   bag:'+3% XP from lvl 14; 3 min rest / 2 h',food:'+5% XP from kills',faction:'Faction',alliance:'Alliance',horde:'Horde',
   dungeons:'Dungeons',off:'Off',typical:'Typical',all:'All first runs',calculate:'Calculate',
+  dungeonHint:'First runs with quests. Data: Nov 13, 2026.',
   remaining:'Time to level 60',days:'Days of play',xp:'Remaining XP',saved:'Dungeon time saved ≈',
   startDate:'Start date',eta60:'Estimated level 60',milestones:'Estimated milestones',
   byDays:'By days',byPlayed:'By /played',

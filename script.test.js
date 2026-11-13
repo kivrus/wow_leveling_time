@@ -304,16 +304,51 @@ test('both factions receive a whole-route scenario and Typical applies 65% once'
     close(typical.dungeonAdjustmentMinutes,all.dungeonAdjustmentMinutes*0.65);
     assert.equal(all.remainingXP,off.remainingXP);
     assert.ok(all.remainingMinutes<typical.remainingMinutes&&typical.remainingMinutes<off.remainingMinutes);
-    for(const block of all.dungeonBreakdown) close(block.reduction,block.routeQuestXP*0.4/block.blockXP);
+    for(const block of all.dungeonBreakdown) close(block.reduction,(block.routeQuestXP+block.routeMobDeltaXP)*0.4/block.blockXP);
   }
 });
 
 test('raw block budgets reconcile with the supplied route estimates',()=>{
   const alliance=baseline(1,{...forever,dungeonMode:'all'}).dungeonBreakdown;
   const horde=baseline(1,{...forever,faction:'horde',dungeonMode:'all'}).dungeonBreakdown;
-  [56250,51100,128100,193500,402000].forEach((xp,i)=>close(alliance[i].routeQuestXP,xp));
-  [44650,55400,133600,193500,407000].forEach((xp,i)=>close(horde[i].routeQuestXP,xp));
+  [54815,65400,133200,193500,402000].forEach((xp,i)=>close(alliance[i].routeQuestXP,xp));
+  [50175,53200,138700,193500,407000].forEach((xp,i)=>close(horde[i].routeQuestXP,xp));
   assert.ok(alliance.at(-1).routeQuestXP<500000); // Not the sum of all theoretical late chains.
+});
+
+test('November mob rate applies once to measured kills, independently of quest rewards',()=>{
+  const {DUNGEON_MOB_XP_MULTIPLIER,getDungeonMobXP,getDungeonMobDelta}=require('./dungeons.js');
+  assert.equal(DUNGEON_MOB_XP_MULTIPLIER,0.6);
+  const bfd=dungeonData.find(d=>d.id==='blackfathom');
+  close(getDungeonMobXP(bfd),7393.5);
+  close(getDungeonMobDelta(bfd),2464.5);
+  close(bfd.questXp.horde,31000);
+  close(getDungeonExtraXP(bfd,'horde'),18000);
+  assert.equal(getDungeonMobXP(dungeonData.find(d=>d.id==='drowned')),null);
+  const options={...forever,level:1,faction:'horde',dungeonMode:'all'};
+  const adjusted=getDungeonAdjustments(options,referenceMinutesPerLevel);
+  const noSamples=getDungeonAdjustments(options,referenceMinutesPerLevel,dungeonData.map(d=>({...d,mobSample:null})));
+  adjusted.breakdown.forEach((block,i)=>{
+    close(block.routeQuestXP,noSamples.breakdown[i].routeQuestXP);
+    close(block.routeMobDeltaXP,i===1?2464.5:0);
+  });
+  assert.ok(adjusted.mobShares[24]>0);
+  assert.equal(adjusted.mobShares[40],0);
+  assert.ok(adjusted.adjustments[24]>noSamples.adjustments[24]);
+  assert.ok(getDungeonAdjustments({...options,dungeonMode:'off'},referenceMinutesPerLevel).adjustments.every(x=>x===0));
+});
+
+test('updated quest packages preserve ranges, faction differences and incomplete observations',()=>{
+  const find=id=>dungeonData.find(d=>d.id===id);
+  close(getDungeonExtraXP(find('thanes'),'alliance'),13825);
+  close(getDungeonExtraXP(find('lordaeron'),'horde'),29075);
+  close(getDungeonExtraXP(find('excavation'),'alliance'),39300);
+  close(getDungeonExtraXP(find('excavation'),'horde'),22800);
+  close(getDungeonExtraXP(find('dalaran'),'alliance'),37600);
+  close(getDungeonExtraXP(find('deadmines'),'alliance'),9850);
+  assert.equal(find('wailing').observations.usedInRoute,false);
+  assert.equal(find('ragefire').observations.usedInRoute,false);
+  assert.equal(find('shaper').confidence,'estimated');
 });
 
 test('actual replacement rewards automatically update the model',()=>{

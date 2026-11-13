@@ -25,7 +25,7 @@ const referenceMinutesPerLevel = [
 ];
 
 const dungeonModel = typeof module !== 'undefined' && module.exports
-  ? require('./dungeons.js') : { dungeonData, dungeonBlocks, DUNGEON_EFFECTIVE_FACTOR, DUNGEON_TYPICAL_FACTOR };
+  ? require('./dungeons.js') : { dungeonData, dungeonBlocks, DUNGEON_EFFECTIVE_FACTOR, DUNGEON_TYPICAL_FACTOR, getDungeonMobDelta };
 const KILL_XP_FRACTION = 0.4; // Planning assumption; the rest is quests/exploration.
 
 // Store BONUS XP, not the blue bar's total (normal + bonus) kill XP.
@@ -119,8 +119,9 @@ function getDungeonExtraXP(dungeon, faction) {
 // Block-level planning scenario. No free XP subtraction and no second mob/run penalty.
 function getDungeonAdjustments({ level, faction, dungeonMode, version }, levelMinutes, data = dungeonModel.dungeonData) {
   const adjustments = Array(59).fill(0);
+  const mobShares = Array(59).fill(0);
   const breakdown = [];
-  if (version !== 'forever' || dungeonMode === 'off') return { adjustments, breakdown };
+  if (version !== 'forever' || dungeonMode === 'off') return { adjustments, breakdown, mobShares };
   const attendance = dungeonMode === 'typical' ? dungeonModel.DUNGEON_TYPICAL_FACTOR : 1;
   for (const block of dungeonModel.dungeonBlocks) {
     const dungeons = data.filter(dungeon => dungeon.typicalLevel >= block.minLevel && dungeon.typicalLevel < block.maxLevel && (dungeon.faction === faction || dungeon.faction === 'both'));
@@ -128,18 +129,23 @@ function getDungeonAdjustments({ level, faction, dungeonMode, version }, levelMi
       return sum + getDungeonExtraXP(dungeon, faction) * dungeon.packageShare;
     }, 0);
     const routeQuestXP = rawQuestXP * block.routeCoverage;
-    const effectiveXP = routeQuestXP * dungeonModel.DUNGEON_EFFECTIVE_FACTOR * attendance;
+    // Only the measured hotfix increment is added: never the whole mob reward
+    // again, and never an invented 100-mob run for every dungeon.
+    const routeMobDeltaXP = dungeons.reduce((sum,dungeon)=>sum+dungeonModel.getDungeonMobDelta(dungeon),0) * block.routeCoverage;
+    const routeExtraXP = routeQuestXP + routeMobDeltaXP;
+    const effectiveXP = routeExtraXP * dungeonModel.DUNGEON_EFFECTIVE_FACTOR * attendance;
     const blockXP = xpPerLevel.slice(block.minLevel - 1, block.maxLevel - 1).reduce((sum, xp) => sum + xp, 0);
     const reduction = Math.min(0.3, effectiveXP / blockXP); // Forecast guard, not a game rule.
     let savedMinutes = 0;
     // Completed parts of a block are never credited again. Smooth the scenario over the block.
     for (let lvl = Math.max(level, block.minLevel); lvl < block.maxLevel; lvl++) {
       adjustments[lvl - 1] = levelMinutes[lvl - 1] * reduction;
+      mobShares[lvl - 1] = routeExtraXP > 0 ? routeMobDeltaXP / routeExtraXP : 0;
       savedMinutes += adjustments[lvl - 1];
     }
-    if (level < block.maxLevel) breakdown.push({ ...block, rawQuestXP, routeQuestXP, effectiveXP, blockXP, reduction, savedMinutes });
+    if (level < block.maxLevel) breakdown.push({ ...block, rawQuestXP, routeQuestXP, routeMobDeltaXP, effectiveXP, blockXP, reduction, savedMinutes });
   }
-  return { adjustments, breakdown };
+  return { adjustments, breakdown, mobShares };
 }
 
 function calculateProjection({ level, played = 0, dailyHours, includeRested = true, initialRestedXP,
@@ -176,8 +182,12 @@ function calculateProjection({ level, played = 0, dailyHours, includeRested = tr
   });
   // Keep the existing dungeon reduction as a non-rested route adjustment.
   // Its extra quest XP must not generate extra rested kill XP.
-  const dungeonSegments = segments.map((segment, offset) => ({ ...segment,
-    xpPerMinute: segment.xp / (levelMinutes[level - 1 + offset] - dungeonResult.adjustments[level - 1 + offset]) }));
+  const dungeonSegments = segments.map((segment, offset) => {
+    const i = level - 1 + offset;
+    const xpPerMinute = segment.xp / (levelMinutes[i] - dungeonResult.adjustments[i]);
+    return { ...segment, xpPerMinute,
+      killXpPerMinute: segment.killXpPerMinute + (xpPerMinute - segment.xpPerMinute) * dungeonResult.mobShares[i] };
+  });
   const withoutDungeons = simulateProgress(segments, simulationOptions);
   const route = simulateProgress(dungeonSegments, simulationOptions);
   const baseRemainingMinutes = sum(withoutDungeons.levelMinutes);
