@@ -252,7 +252,7 @@ test('minute display carries into hours and days', () => {
 
 const { getXpBoost, getDungeonAdjustments, getDungeonExtraXP } = require('./script.js');
 const { dungeonData, dungeonBlocks } = require('./dungeons.js');
-const forever = { version:'forever', includeRested:false, dailyHours:2 };
+const forever = { faction:'alliance', version:'forever', includeRested:false, dailyHours:2 };
 
 test('Sleeping Bag starts at 14, food affects kills only, Vanilla ignores buffs',()=>{
   close(getXpBoost(13,{...forever,sleepingBag:true}).total,1);
@@ -287,10 +287,11 @@ test('35 distinct dungeons, nine new, with valid level ranges and no duplicate p
   for(const dungeon of dungeonData) {
     assert.ok(dungeon.typicalLevel>=dungeon.minLevel&&dungeon.typicalLevel<=dungeon.maxLevel);
   }
-  for(const [group,total] of [['sm',11000],['dire-maul',70000],['stratholme',125000]]) {
+  for(const [group,total] of [['sm',15000],['dire-maul',78150],['stratholme',109300],['blackrock-spire',107100]]) {
     const members=dungeonData.filter(d=>d.packageId===group);
     close(members.reduce((sum,d)=>sum+d.packageShare,0),1);
-    close(members.reduce((sum,d)=>sum+getDungeonExtraXP(d,'alliance')*d.packageShare,0),total);
+    close(members.reduce((sum,d)=>sum+d.questXp.alliance*d.packageShare,0),total);
+    close(members.reduce((sum,d)=>sum+getDungeonExtraXP(d,'alliance')*d.packageShare,0),total-total/2.3);
   }
 });
 
@@ -308,47 +309,83 @@ test('both factions receive a whole-route scenario and Typical applies 65% once'
   }
 });
 
-test('raw block budgets reconcile with the supplied route estimates',()=>{
+test('route budgets separate full quest pools from their advantage over Classic',()=>{
   const alliance=baseline(1,{...forever,dungeonMode:'all'}).dungeonBreakdown;
   const horde=baseline(1,{...forever,faction:'horde',dungeonMode:'all'}).dungeonBreakdown;
-  [54815,65400,133200,193500,402000].forEach((xp,i)=>close(alliance[i].routeQuestXP,xp));
-  [50175,53200,138700,193500,407000].forEach((xp,i)=>close(horde[i].routeQuestXP,xp));
-  assert.ok(alliance.at(-1).routeQuestXP<500000); // Not the sum of all theoretical late chains.
+  close(alliance[0].routeQuestXP,13300+22680+(17550-9000)+(18450-8600));
+  close(horde[0].routeQuestXP,5250+34750+(25150-12850)+(14300-6250));
+  close(alliance[1].routeQuestXP,39300+(28500-9650)+(24650-11750));
+  close(horde[1].routeQuestXP,22800+(31000-13000)+(19800-7400));
+  const advantage=x=>x-x/2.3;
+  close(alliance[3].routeQuestXP,(61500+advantage(24245+37750+22800))*0.9);
+  close(horde[3].routeQuestXP,(37350+advantage(19600+32500+22800))*0.9);
+  close(alliance[4].routeQuestXP,(79000+43000+55000+advantage(79150+94250+107100+78150+84500+109300))*0.5);
+  close(horde[4].routeQuestXP,(92000+44000+55000+advantage(74350+92400+113700+78150+94450+120850))*0.5);
 });
 
-test('November mob rate applies once to measured kills, independently of quest rewards',()=>{
+test('November mob rate applies once across every bracket, independently of quest rewards',()=>{
   const {DUNGEON_MOB_XP_MULTIPLIER,getDungeonMobXP,getDungeonMobDelta}=require('./dungeons.js');
   assert.equal(DUNGEON_MOB_XP_MULTIPLIER,0.6);
   const bfd=dungeonData.find(d=>d.id==='blackfathom');
-  close(getDungeonMobXP(bfd),7393.5);
-  close(getDungeonMobDelta(bfd),2464.5);
+  close(getDungeonMobXP(bfd),8100);
+  close(getDungeonMobDelta(bfd),2700);
   close(bfd.questXp.horde,31000);
   close(getDungeonExtraXP(bfd,'horde'),18000);
-  assert.equal(getDungeonMobXP(dungeonData.find(d=>d.id==='drowned')),null);
-  const options={...forever,level:1,faction:'horde',dungeonMode:'all'};
-  const adjusted=getDungeonAdjustments(options,referenceMinutesPerLevel);
-  const noSamples=getDungeonAdjustments(options,referenceMinutesPerLevel,dungeonData.map(d=>({...d,mobSample:null})));
-  adjusted.breakdown.forEach((block,i)=>{
-    close(block.routeQuestXP,noSamples.breakdown[i].routeQuestXP);
-    close(block.routeMobDeltaXP,i===1?2464.5:0);
-  });
-  assert.ok(adjusted.mobShares[24]>0);
-  assert.equal(adjusted.mobShares[40],0);
-  assert.ok(adjusted.adjustments[24]>noSamples.adjustments[24]);
-  assert.ok(getDungeonAdjustments({...options,dungeonMode:'off'},referenceMinutesPerLevel).adjustments.every(x=>x===0));
+  close(getDungeonMobXP(dungeonData.find(d=>d.id==='drowned')),11000);
+  for(const faction of ['alliance','horde']) {
+    const options={...forever,level:1,faction,dungeonMode:'all'};
+    const adjusted=getDungeonAdjustments(options,referenceMinutesPerLevel);
+    const noMobs=getDungeonAdjustments(options,referenceMinutesPerLevel,dungeonData.map(d=>({...d,mobXpClassicEstimate:0,mobXpForeverEstimate:0})));
+    adjusted.breakdown.forEach((block,i)=>{
+      close(block.routeQuestXP,noMobs.breakdown[i].routeQuestXP);
+      assert.ok(block.routeMobDeltaXP>0);
+    });
+    for(let level=13;level<60;level++) {
+      assert.ok(adjusted.mobShares[level-1]>0);
+      assert.ok(adjusted.adjustments[level-1]>noMobs.adjustments[level-1]);
+    }
+    assert.ok(getDungeonAdjustments({...options,dungeonMode:'off'},referenceMinutesPerLevel).adjustments.every(x=>x===0));
+  }
 });
 
-test('updated quest packages preserve ranges, faction differences and incomplete observations',()=>{
+test('updated quest packages preserve faction differences and mark inferred Classic values',()=>{
   const find=id=>dungeonData.find(d=>d.id===id);
-  close(getDungeonExtraXP(find('thanes'),'alliance'),13825);
-  close(getDungeonExtraXP(find('lordaeron'),'horde'),29075);
+  close(getDungeonExtraXP(find('thanes'),'alliance'),13300);
+  close(getDungeonExtraXP(find('lordaeron'),'horde'),34750);
   close(getDungeonExtraXP(find('excavation'),'alliance'),39300);
   close(getDungeonExtraXP(find('excavation'),'horde'),22800);
   close(getDungeonExtraXP(find('dalaran'),'alliance'),37600);
   close(getDungeonExtraXP(find('deadmines'),'alliance'),9850);
-  assert.equal(find('wailing').observations.usedInRoute,false);
-  assert.equal(find('ragefire').observations.usedInRoute,false);
-  assert.equal(find('shaper').confidence,'estimated');
+  assert.equal(find('wailing').classicQuestBasis.alliance,'approximate-early-pair');
+  assert.equal(find('gnomeregan').classicQuestBasis.alliance,'estimated-from-forever/2.3');
+  assert.equal(find('shaper').confidence,'low');
+});
+
+test('all imported mob budgets are used once, including combined wings and new dungeons',()=>{
+  const source=require('./data/dungeon-estimates.json');
+  const {getDungeonMobXP,getDungeonMobDelta}=require('./dungeons.js');
+  assert.equal(source.data.length,31);
+  assert.equal(new Set(dungeonData.map(d=>d.record)).size,31);
+  for(const row of source.data) {
+    const members=dungeonData.filter(d=>d.record===row.dungeon);
+    close(members.reduce((sum,d)=>sum+getDungeonMobXP(d),0),row.mob_xp_forever_estimate);
+    close(members.reduce((sum,d)=>sum+getDungeonMobDelta(d),0),row.mob_xp_forever_estimate/3);
+    if(!members.some(d=>d.packageId==='sm')) {
+      for(const faction of ['alliance','horde']) close(members.reduce((sum,d)=>sum+d.questXp[faction]*d.packageShare,0),row['quest_xp_'+faction+'_estimate']);
+    }
+  }
+});
+
+test('static browser scripts load in HTML order and use the same data and forecast as Node',()=>{
+  const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+  const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+  const files=[...html.matchAll(/<script defer src="([^"?]+)(?:\?[^"\s]*)?"/g)].map(m=>m[1]).filter(f=>!f.startsWith('http')&&f!=='ui.js');
+  assert.deepEqual(files,['data/dungeon-estimates.js','dungeons.js','script.js']);
+  const context=vm.createContext({});
+  for(const file of files) vm.runInContext(fs.readFileSync(path.join(__dirname,file),'utf8'),context,{filename:file});
+  assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(dungeonPlanningEstimates)',context)),require('./data/dungeon-estimates.json'));
+  const options={level:40,...forever,includeRested:true,sleepingBag:true,foodBuff:true,faction:'horde',dungeonMode:'all'};
+  close(vm.runInContext(`calculateProjection(${JSON.stringify(options)}).remainingMinutes`,context),calculateProjection(options).remainingMinutes);
 });
 
 test('actual replacement rewards automatically update the model',()=>{
@@ -397,3 +434,14 @@ test('extreme reward data cannot erase a level, and invalid settings fail',()=>{
   result.adjustments.forEach((minutes,i)=>assert.ok(minutes<=referenceMinutesPerLevel[i]*0.3+1e-8));
   for(const options of [{version:'invalid'},{faction:'invalid'},{dungeonMode:'invalid'},{dailyHours:0.001}]) assert.throws(()=>baseline(20,options),RangeError);
 });
+
+ test('default dungeon route averages faction budgets without counting exclusive runs twice',()=>{
+ const options={level:1,version:'forever',dailyHours:2,dungeonMode:'all',includeRested:false};
+ const average=calculateProjection(options);
+ const a=calculateProjection({...options,faction:'alliance'});
+ const h=calculateProjection({...options,faction:'horde'});
+ average.dungeonBreakdown.forEach((block,i)=>{
+   for(const key of ['rawQuestXP','routeQuestXP','routeMobDeltaXP','effectiveXP']) close(block[key],(a.dungeonBreakdown[i][key]+h.dungeonBreakdown[i][key])/2);
+ });
+ close(average.remainingMinutes,(a.remainingMinutes+h.remainingMinutes)/2);
+ });

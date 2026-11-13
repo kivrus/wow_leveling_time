@@ -117,21 +117,23 @@ function getDungeonExtraXP(dungeon, faction) {
 }
 
 // Block-level planning scenario. No free XP subtraction and no second mob/run penalty.
-function getDungeonAdjustments({ level, faction, dungeonMode, version }, levelMinutes, data = dungeonModel.dungeonData) {
+function getDungeonAdjustments({ level, faction = 'average', dungeonMode, version }, levelMinutes, data = dungeonModel.dungeonData) {
   const adjustments = Array(59).fill(0);
   const mobShares = Array(59).fill(0);
   const breakdown = [];
   if (version !== 'forever' || dungeonMode === 'off') return { adjustments, breakdown, mobShares };
   const attendance = dungeonMode === 'typical' ? dungeonModel.DUNGEON_TYPICAL_FACTOR : 1;
   for (const block of dungeonModel.dungeonBlocks) {
-    const dungeons = data.filter(dungeon => dungeon.typicalLevel >= block.minLevel && dungeon.typicalLevel < block.maxLevel && (dungeon.faction === faction || dungeon.faction === 'both'));
+    const factions = faction === 'average' ? ['alliance', 'horde'] : [faction];
+    const eligible = dungeon => factions.filter(side => dungeon.faction === side || dungeon.faction === 'both');
+    const dungeons = data.filter(dungeon => dungeon.typicalLevel >= block.minLevel && dungeon.typicalLevel < block.maxLevel && eligible(dungeon).length);
     const rawQuestXP = dungeons.reduce((sum, dungeon) => {
-      return sum + getDungeonExtraXP(dungeon, faction) * dungeon.packageShare;
+      return sum + eligible(dungeon).reduce((xp, side) => xp + getDungeonExtraXP(dungeon, side), 0) / factions.length * dungeon.packageShare;
     }, 0);
     const routeQuestXP = rawQuestXP * block.routeCoverage;
-    // Only the measured hotfix increment is added: never the whole mob reward
-    // again, and never an invented 100-mob run for every dungeon.
-    const routeMobDeltaXP = dungeons.reduce((sum,dungeon)=>sum+dungeonModel.getDungeonMobDelta(dungeon),0) * block.routeCoverage;
+    // Estimated 40% -> 60% mob-XP increment across the route. The earlier
+    // mob reward is assumed to be included in the existing route calibration.
+    const routeMobDeltaXP = dungeons.reduce((sum,dungeon)=>sum+dungeonModel.getDungeonMobDelta(dungeon)*eligible(dungeon).length/factions.length,0) * block.routeCoverage;
     const routeExtraXP = routeQuestXP + routeMobDeltaXP;
     const effectiveXP = routeExtraXP * dungeonModel.DUNGEON_EFFECTIVE_FACTOR * attendance;
     const blockXP = xpPerLevel.slice(block.minLevel - 1, block.maxLevel - 1).reduce((sum, xp) => sum + xp, 0);
@@ -149,12 +151,12 @@ function getDungeonAdjustments({ level, faction, dungeonMode, version }, levelMi
 }
 
 function calculateProjection({ level, played = 0, dailyHours, includeRested = true, initialRestedXP,
-  version = 'vanilla', sleepingBag = false, foodBuff = false, faction = 'alliance', dungeonMode = 'off' }) {
+  version = 'vanilla', sleepingBag = false, foodBuff = false, faction = 'average', dungeonMode = 'off' }) {
   if (!Number.isInteger(level) || level < 1 || level > 59) throw new RangeError('level');
   if (!Number.isFinite(played) || played < 0 || played > 1000000) throw new RangeError('played');
   if (!Number.isFinite(dailyHours) || dailyHours < 0.1 || dailyHours > 24) throw new RangeError('dailyHours');
   if (initialRestedXP !== undefined && (!Number.isFinite(initialRestedXP) || initialRestedXP < 0)) throw new RangeError('initialRestedXP');
-  if (!['vanilla', 'forever'].includes(version) || !['alliance', 'horde'].includes(faction)
+  if (!['vanilla', 'forever'].includes(version) || !['average', 'alliance', 'horde'].includes(faction)
       || !['off', 'typical', 'all'].includes(dungeonMode)) throw new RangeError('settings');
   const sum = values => values.reduce((total, value) => total + value, 0);
   const options = { level, version, sleepingBag, foodBuff, dailyHours, includeRested, faction, dungeonMode };

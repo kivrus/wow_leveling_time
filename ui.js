@@ -1,13 +1,13 @@
 const english = {
   title:'Leveling Time Calculator 1–60',level:'Current level',played:'/played, hours',dailyHours:'Hours per day',
-  bag:'+3% XP from lvl 14; 3 min rest / 2 h',food:'+5% XP from kills',faction:'Faction',alliance:'Alliance',horde:'Horde',
-  dungeons:'Dungeons',off:'Off',typical:'Typical',all:'All first runs',calculate:'Calculate',
-  dungeonHint:'First runs with quests. Data: Nov 13, 2026.',
+  bag:'+3% XP from lvl 14; 3 min rest / 2 h',food:'+5% XP from mob kills',
+  dungeons:'Route',off:'Quests only',all:'Quests and dungeons',calculate:'Calculate',
+  dungeonHint:'Quests only: outdoor leveling, including mob kills. Dungeons: also full first clears with all available quests, without repeat farming.',
   remaining:'Time to level 60',days:'Days of play',xp:'Remaining XP',saved:'Dungeon time saved ≈',
   startDate:'Start date',eta60:'Estimated level 60',milestones:'Estimated milestones',
   byDays:'By days',byPlayed:'By /played',
   chartFallback:'The chart could not load. The calculation still works.',
-  note:'Baseline: ~150h. Rested assumes daily inn logout. /played adjusts your pace. Dungeons are estimated, especially after level 30.'
+  note:'Baseline: ~150h. Rested assumes daily inn logout. /played adjusts your pace. Dungeons are estimated, especially after level 30. Data updated: Nov 13, 2026.'
 };
 const messages = {
   ru:{total:'Общий /played',dayAxis:'Дни игры',levelAxis:'Уровень',game:'Версия игры',language:'Язык',results:'Результаты',date:'Дата',startDate:'Выбери корректную дату начала.',
@@ -19,7 +19,7 @@ const messages = {
 };
 const byId = id => document.getElementById(id);
 const russian = Object.fromEntries([...document.querySelectorAll('[data-i18n]')].map(el=>[el.dataset.i18n,el.textContent]));
-let language='ru',version='vanilla',chart=null,chartMode='days',lastForecast=null;
+let language='ru',version='forever',chart=null,chartMode='days',lastForecast=null;
 try { const saved=localStorage.getItem('leveling-language'); if(['ru','en'].includes(saved)) language=saved; } catch (_) {}
 function setLanguage(next) {
   language=next;
@@ -50,7 +50,7 @@ function calculate() {
   const played=byId('played');
   const options={level:byId('level').valueAsNumber,played:played.value===''&&!played.validity.badInput?0:played.valueAsNumber,
     dailyHours:byId('dailyHours').valueAsNumber,version,includeRested:true,sleepingBag:byId('sleepingBag').checked,
-    foodBuff:byId('foodBuff').checked,faction:byId('faction').value,dungeonMode:byId('dungeonMode').value};
+    foodBuff:byId('foodBuff').checked,dungeonMode:byId('dungeonMode').value};
   const startDate=byId('startDate').value;
   let result,milestones;
   try { result=calculateProjection(options); milestones=getMilestoneDates(result.points,startDate); }

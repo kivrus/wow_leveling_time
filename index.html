@@ -4,16 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WoW Leveling Calculator</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=12">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script defer src="dungeons.js?v=12"></script>
-  <script defer src="script.js?v=12"></script>
-  <script defer src="ui.js?v=12"></script>
+  <script defer src="data/dungeon-estimates.js?v=13"></script>
+  <script defer src="dungeons.js?v=13"></script>
+  <script defer src="script.js?v=14"></script>
+  <script defer src="ui.js?v=17"></script>
 </head>
 <body>
   <main>
     <header>
-      <div class="brand vanilla" id="brand"><img id="gameLogo" src="assets/vanilla-logo.png" alt="World of Warcraft"></div>
+      <div class="brand" id="brand"><img id="gameLogo" src="assets/forever-logo.avif" alt="WoW Forever"></div>
       <div class="heading"><h1 data-i18n="title">Калькулятор прокачки 1–60</h1><a href="https://www.youtube.com/@Kivrus" target="_blank" rel="noopener noreferrer"><img src="avatar.png" alt="" width="22" height="22"> Kivrus</a></div>
       <div class="switches">
         <div class="segmented" id="languages" aria-label="Language">
@@ -24,18 +25,17 @@
     </header>
     <div class="calculator">
       <form id="calculatorForm" novalidate>
-        <div class="segmented" id="versions" aria-label="Game version"><button type="button" data-version="vanilla" aria-pressed="true">Vanilla</button><button type="button" data-version="forever" aria-pressed="false">Forever</button></div>
+        <div class="segmented" id="versions" aria-label="Game version"><button type="button" data-version="forever" aria-pressed="true">Forever</button><button type="button" data-version="vanilla" aria-pressed="false">Vanilla</button></div>
         <div class="inputs">
           <label><span data-i18n="level">Уровень</span><input type="number" id="level" min="1" max="59" step="1" value="1" required></label>
           <label><span data-i18n="played">/played, часов</span><input type="number" id="played" min="0" max="1000000" step="any" placeholder="0"></label>
           <label><span data-i18n="dailyHours">Часов в день</span><input type="number" id="dailyHours" min="0.1" max="24" step="any" value="2" required></label>
         </div>
         <label><span data-i18n="startDate">Дата начала</span><input type="date" id="startDate" min="0001-01-01" max="9999-12-31" required></label>
-        <fieldset id="foreverOptions" hidden disabled>
+        <fieldset id="foreverOptions">
           <label class="check"><input type="checkbox" id="sleepingBag" checked><span>Sleeping Bag <small data-i18n="bag">+3% XP с 14 ур.; 3 мин отдыха / 2 ч</small></span></label>
-          <label class="check"><input type="checkbox" id="foodBuff" checked><span>Food EXP Buff <small data-i18n="food">+5% XP за убийства</small></span></label>
-          <label><span data-i18n="faction">Фракция</span><select id="faction"><option value="alliance" data-i18n="alliance">Альянс</option><option value="horde" data-i18n="horde">Орда</option></select></label>
-          <label><span data-i18n="dungeons">Данжи</span><select id="dungeonMode" aria-describedby="dungeonHint"><option value="off" data-i18n="off">Выключены</option><option value="typical" data-i18n="typical">Обычный маршрут</option><option value="all" data-i18n="all">Все первые заходы</option></select><small id="dungeonHint" data-i18n="dungeonHint">Первые заходы с квестами. Данные: 13.11.2026.</small></label>
+          <label class="check"><input type="checkbox" id="foodBuff" checked><span>Food EXP Buff <small data-i18n="food">+5% XP за убийства мобов</small></span></label>
+          <label class="route-choice"><span data-i18n="dungeons">Маршрут</span><select id="dungeonMode" aria-describedby="dungeonHint"><option value="off" data-i18n="off">Только квесты</option><option value="all" data-i18n="all">Квесты и подземелья</option></select><small id="dungeonHint" data-i18n="dungeonHint">Только квесты — обычная прокачка в мире, включая убийства мобов. Подземелья — также полные первые прохождения со всеми доступными квестами, без повторного фарма.</small></label>
         </fieldset>
         <p id="formError" role="alert" hidden></p>
         <button class="calculate" type="submit" data-i18n="calculate">Рассчитать</button>
@@ -61,7 +61,7 @@
         <div class="milestones" aria-live="polite"><span id="milestoneLabel" data-i18n="milestones">Ориентиры ≈</span><ul id="milestoneDates"></ul></div>
       </section>
     </div>
-    <p class="model-note" data-i18n="note">База: ~150 ч. Rested: ежедневный выход в таверне. /played уточняет темп. Данжи — оценка, особенно после 30 уровня.</p>
+    <p class="model-note" data-i18n="note">База: ~150 ч. Rested: ежедневный выход в таверне. /played уточняет темп. Данжи — оценка, особенно после 30 уровня. Данные обновлены: 13.11.2026.</p>
   </main>
 </body>
 </html>

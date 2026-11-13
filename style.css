@@ -63,3 +63,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible { 
   .summary { gap:12px 20px; } .summary strong { font-size:18px; }
   #chartWrapper { height:450px; }
 }
+
+#dungeonHint { margin-top:14px; line-height:1.5; }
+
+.route-choice { grid-column:1 / -1; }

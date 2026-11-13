@@ -9,8 +9,8 @@ Uses your current level, `/played`, and daily playtime to calculate remaining ga
 
 - Vanilla / Forever modes and RU / EN interface.
 - Pace adjustment based on `/played`, with automatic Rested XP estimation.
-- Forever: Sleeping Bag from level 14, Food EXP Buff, and faction selection.
-- Dungeons: Off, Typical, or All first runs with quests.
+- Forever: Sleeping Bag from level 14 and Food EXP Buff.
+- Routes: Quests only, or Quests and dungeons (full first clears with available quests, no repeat farming).
 - Start date, calendar ETA for level 60, milestone dates, and dates in chart tooltips.
 - Chart views by days or cumulative `/played`, with localized milestone times: `1d 7h 30m` (EN) or `1 д. 7 ч. 30 мин.` (RU). If current `/played` is unknown above level 1, the time view shows remaining playtime instead.
 
@@ -33,11 +33,11 @@ The pace factor is 1 when `/played` is missing or zero, or the character is leve
 - **Rested calibration:** a level-dependent utilization factor represents imperfect real-world rest usage, not an in-game scaling rule. It rises smoothly from roughly 25–30% at low levels toward 80% at high levels. It affects only new accumulation, including the estimated initial reserve; existing XP and the reserve cap are unchanged.
 - **Buffs:** Sleeping Bag adds 3% to all XP from level 14; Food adds 5% to kill XP. Kills are assumed to provide 40% of total XP, and bonuses are additive.
 - **Sleeping Bag setup:** from level 14, time with the buff is multiplied by `123 / 120` to allow 3 minutes of rest per 2 hours of active buff time. This is an averaged cost, without rounding at level or session boundaries; the first and final partial cycles are not simulated.
-- **Dungeons:** quest advantages and measured mob-XP increments are distributed across level brackets 13–20 / 20–30 / 30–40 / 40–50 / 50–60. The reduction is `min(0.30, (route quest advantage + route mob increment) × 0.40 × attendance / bracket XP)`. Attendance is 0 / 0.65 / 1 for Off / Typical / All first runs. The 0.40 net time-efficiency assumption is separate from the game's mob-XP multiplier; route coverage remains 100% / 100% / 100% / 90% / 50%. Displayed savings compare two Rested simulations. Only the mob portion of the incremental rate can consume Rested.
+- **Dungeons:** quest advantages and estimated mob-XP increments are distributed across level brackets 13–20 / 20–30 / 30–40 / 40–50 / 50–60. The reduction is `min(0.30, (route quest advantage + route mob increment) × 0.40 × attendance / bracket XP)`. Attendance is 0 for Quests only and 1 for Quests and dungeons. The calculation API retains the legacy Typical scenario (0.65), which is no longer shown in the interface. The 0.40 net time-efficiency assumption is separate from the game's mob-XP multiplier; route coverage remains 100% / 100% / 100% / 90% / 50%. Displayed savings compare two Rested simulations. Only the mob portion of the incremental rate can consume Rested.
 
-**Dungeon data update — November 13, 2026:** dungeon kills use `0.60 × Classic Era XP`; do not apply another +50% or scale quest rewards by 0.60. The [November 8 Blizzard hotfix](https://us.forums.blizzard.com/en/wow/t/dungeon-enemy-xp-increased-november-8/2406595) confirms the +50% kill-XP increase; the supplied research gives the 0.40 → 0.60 conversion. BFD's beta sample extrapolates from 4,929 to 7,393.5 kill XP. Only its 2,464.5 increment enters the route correction, with attendance and efficiency applied once. The sample's 0.40 starting rate is an assumption; this is not a new live measurement. Other dungeons have no measured kill budget and receive no guessed mob increment, so the model does not yet quantify the hotfix's full-route impact.
+**Dungeon data — November 13, 2026:** the supplied [JSON](data/dungeon-estimates.json) and [CSV](data/dungeon-estimates.csv) contain 31 source rows mapped to 35 dungeon entries. Mob budgets are per player in a five-player, similar-level group, without Rested or buffs. They are estimates, with roughly 30–50% uncertainty. Old dungeons use `Classic mob XP × 0.60`; new-dungeon budgets already represent the 60% scenario. Only the estimated increase from 40% to 60% enters the route correction: the pre-hotfix mob reward is assumed to be included in the existing route calibration.
 
-Updated quest packages: Hall of Thanes and Ruins of Lordaeron use range midpoints; Excavation and Dalaran replace placeholders; Deadmines uses 18,450 total quest XP before subtracting its approximate Classic counterpart. WC's new partial totals and RFC's chain-inclusive total are stored separately, not substituted for differently scoped Classic comparisons. High-level estimates remain flagged. There is no universal quest multiplier, repeated-run simulator, or assumed mob count. Camp Tent, Legacy, group-level penalties and new outdoor quest routes are not quantified by the supplied data and remain outside this forecast.
+The UI uses the average of Alliance and Horde route XP budgets; faction selection is not exposed. Faction-specific source values are retained for future corrections. Quest values are full Forever pools, not extra XP. Old-dungeon advantages subtract approximate Classic packages; where comparable packages are missing, `Classic ≈ Forever / 2.3` is a temporary assumption. New dungeons use their full quest pool. Combined Dire Maul, Stratholme and LBRS/UBRS pools are split once across their wings. SM conservatively counts Graveyard + Library + the larger of Armory/Cathedral to avoid duplicating shared quest chains. Late chains, repeat visits and uncertain rewards are discounted by the existing coverage/efficiency factors; this is a route forecast, not a single-clear XP calculator.
 
 Coefficients are modeling assumptions. Dungeon data, especially above level 30, are estimates. Classes and professions are not modeled separately.
 
@@ -47,12 +47,14 @@ Coefficients are modeling assumptions. Dungeon data, especially above level 30, 
 
 Static HTML, CSS, and JavaScript. Charts use Chart.js from a CDN. No build step or backend is required.
 
-Open `index.html` in a browser. For GitHub Pages, publish the project files together with the `assets/` folder, using branch `main` and folder `/` as the publishing source.
+Open `index.html` in a browser. For GitHub Pages, publish the project files together with the `assets/` and `data/` folders, using branch `main` and folder `/` as the publishing source.
 
 - `index.html`, `style.css` — markup and styling.
 - `ui.js` — interface, localization, and chart.
 - `script.js` — time calculations.
-- `dungeons.js` — dungeon data and coefficients.
+- `dungeons.js` — route mapping, quest comparisons, and coefficients.
+- `data/dungeon-estimates.json`, `.csv` — supplied source estimates.
+- `data/dungeon-estimates.js` — browser copy of the JSON, loaded before `dungeons.js` (no fetch/build needed). When updating JSON, update this copy too; tests check they match.
 
 Run calculation tests (requires Node.js):
 
